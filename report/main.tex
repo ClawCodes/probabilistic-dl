@@ -1,0 +1,176 @@
+\documentclass[10pt]{article}
+
+\usepackage[letterpaper,margin=0.75in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+
+% Put every image used by this report in report/figs/. Figure calls below
+% therefore need only the filename, for example: density_grid.png.
+\graphicspath{{figs/}}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+\setlength{\textfloatsep}{0.7em}
+\setlength{\floatsep}{0.7em}
+\setlength{\intextsep}{0.7em}
+
+% A visible writing area. Replace each entire \answerbox call with prose when
+% drafting the final report.
+\newcommand{\answerbox}[2]{%
+  \noindent\fcolorbox{gray!55}{gray!5}{%
+    \begin{minipage}{0.965\linewidth}
+      \textcolor{gray!75}{\textit{#1}}
+      \par\vspace{#2}
+    \end{minipage}%
+  }\par
+}
+
+% Includes an image when it exists and otherwise leaves a compile-safe box.
+% Usage: \reportfigure{filename.png}{Caption text.}{fig:label}
+\newcommand{\reportfigure}[3]{%
+  \begin{figure}[tb]
+    \centering
+    \IfFileExists{figs/#1}{%
+      \includegraphics[width=0.88\linewidth,height=0.29\textheight,keepaspectratio]{#1}%
+    }{%
+      \fbox{\parbox[c][0.16\textheight][c]{0.82\linewidth}{%
+        \centering\textcolor{gray!75}{Figure placeholder\\[0.4em]
+        Put \texttt{\detokenize{#1}} in \texttt{figs/}}}%
+    }
+    }
+    \caption{#2}
+    \label{#3}
+  \end{figure}
+}
+
+\title{HW \#1: Mixture Density Networks}
+\author{Nicole Lacey \and Chris (something)}
+\date{Probabilistic Deep Learning --- Fall 2026}
+
+\begin{document}
+\maketitle
+\vspace{-2.2em}
+
+
+\section{Model and implementation}
+
+For an input $\mathbf{x}$ and target $\mathbf{y}$, our mixture density network
+(MDN) models the conditional density as
+\begin{equation}
+  p(\mathbf{y}\mid\mathbf{x}) =
+  \sum_{k=1}^{K}\pi_k(\mathbf{x})
+  \mathcal{N}\!\left(\mathbf{y};\boldsymbol{\mu}_k(\mathbf{x}),
+  \boldsymbol{\Sigma}_k(\mathbf{x})\right),
+  \qquad \sum_{k=1}^{K}\pi_k(\mathbf{x})=1.
+\end{equation}
+The network is trained by minimizing the mean negative log likelihood (NLL).
+
+\answerbox{Describe the shared network, parameterization of mixture weights and
+scales, covariance assumptions, numerical-stability choices (for example,
+log-sum-exp and a minimum scale), optimizer, and hyperparameters. Explain how
+the deterministic baseline and the $K=1$ Gaussian model differ.}{5\baselineskip}
+
+\section{Synthetic two-dimensional example}
+
+\answerbox{Define the synthetic input--output relationship, sample size,
+train/test split, noise process, and why $p(\mathbf{y}\mid\mathbf{x})$ is
+multimodal. State what behavior would validate the implementation.}{4\baselineskip}
+
+\reportfigure{synthetic_raw_data.png}{Raw training observations for the
+synthetic task, showing the multiple output modes associated with the input.}
+{fig:synthetic-data}
+
+\reportfigure{density_grid_2d.png}{Learned conditional density for the synthetic
+2D task over a grid of input and output values. The density should reveal the
+modes captured by the MDN and how their locations, weights, and widths vary with
+the input.}{fig:density-grid-2d}
+
+\answerbox{Interpret Figures~\ref{fig:synthetic-data} and
+\ref{fig:density-grid-2d}. Discuss whether the MDN finds each mode, how mixture
+weights/scales change with the input, where the model fails, and whether the
+deterministic regressor averages incompatible outcomes.}{5\baselineskip}
+
+\section{Baselines and number of mixture components}
+
+We compare an ordinary deterministic regressor, a single-Gaussian network
+($K=1$), and MDNs with several values of $K$. All models use the same data split
+and, where possible, comparable capacity and training budgets.
+
+\begin{table}[tb]
+  \centering
+  \caption{Synthetic-data performance loaded directly from
+  \texttt{csvs/synthetic\_summary.csv}. NLL is not defined for the
+  deterministic model.}
+  \label{tab:synthetic-results}
+  \input{csvs/synthetic_summary_table.tex}
+\end{table}
+
+\reportfigure{synthetic_training.png}{Training objective and RMSE across epochs
+for the deterministic baseline, single-Gaussian model, and MDNs with different
+numbers of components.}
+{fig:synthetic-comparison}
+
+\answerbox{Use Table~\ref{tab:synthetic-results} and
+Figure~\ref{fig:synthetic-comparison} to compare deterministic, $K=1$, and
+$K>1$ models. Explain the metrics, the benefit or cost of additional components,
+and any evidence of underfitting, overfitting, unstable components, or mode
+collapse.}{6\baselineskip}
+
+\section{Higher-dimensional realistic data}
+
+We use the wind-turbine SCADA dataset as the realistic task. The response,
+input features, preprocessing, and split are specified below rather than
+assuming that adjacent time points are independent.
+
+\answerbox{Describe the prediction target and all input dimensions. Summarize
+dataset size, missing/outlier handling, normalization, and the train/validation/
+test protocol. Justify whether the split is random, grouped, or chronological,
+and explain why multimodal or heteroscedastic output may be plausible.}{6\baselineskip}
+
+\reportfigure{wind_turbine_features.png}{Wind-turbine active power against each
+available numeric predictor, used to assess multimodality and
+heteroscedasticity before fitting the models.}
+{fig:wind-features}
+
+\reportfigure{density_grid_wind_turbine.png}{Learned conditional density for the
+wind-turbine task over a grid of inputs and active-power outputs. Use this view
+to show heteroscedasticity, multiple operating regimes, and regions where the
+model assigns diffuse or multimodal probability.}{fig:density-grid-wind}
+
+\begin{table}[tb]
+  \centering
+  \caption{Wind-turbine performance loaded directly from
+  \texttt{csvs/wind\_turbine\_summary.csv}. RMSE is reported in kW; NLL is
+  evaluated on standardized targets and is not defined for the deterministic
+  model.}
+  \label{tab:wind-results}
+  \input{csvs/wind_turbine_summary_table.tex}
+\end{table}
+
+\reportfigure{wind_turbine_training.png}{Training and validation/test behavior
+for the realistic-data models, including the selected checkpoint or stopping
+point.}{fig:wind-training}
+
+\answerbox{Compare training and test behavior on the realistic dataset. Discuss
+generalization gaps, predictive sharpness and calibration, regions of high
+uncertainty, the effect of $K$, and how conclusions differ from the controlled
+synthetic example. Reference Figures~\ref{fig:wind-features} and
+\ref{fig:density-grid-wind}, Figure~\ref{fig:wind-training}, and
+Table~\ref{tab:wind-results}.}{7\baselineskip}
+
+\section{Conclusion}
+
+\answerbox{Summarize when the MDN improves on deterministic and single-Gaussian
+regression, identify the best-supported mixture count, state limitations, and
+give one concrete next experiment.}{4\baselineskip}
+
+% Uncomment this section if references are used.
+% \begin{thebibliography}{9}
+% \bibitem{bishop1994mdn}
+% C. M. Bishop, ``Mixture Density Networks,'' 1994.
+% \end{thebibliography}
+
+\end{document}

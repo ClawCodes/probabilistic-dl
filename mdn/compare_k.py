@@ -3,16 +3,19 @@ Compare the MDN (across K) against the deterministic RegressionNet baseline
 on the bimodal toy regression task from `networks._demo_general` (same
 generative process: two linear modes mixed 50/50, plus small Gaussian noise).
 
-Produces the following plots, saved under mdn/plots/:
-  0. raw_data.png - scatter of the raw training data, x vs each output
+Produces the following plots, saved directly under report/figs/:
+  0. synthetic_raw_data.png - scatter of the raw training data, x vs each output
      dimension, no model overlay.
-  1. loss_accuracy_vs_epoch.png - training loss (MDN: NLL, Regression: MSE)
+  1. synthetic_training.png - training loss (MDN: NLL, Regression: MSE)
      and training accuracy (negative RMSE) vs epoch, one curve per K plus the
      RegressionNet baseline.
-  2. holdout_accuracy_vs_k.png - held-out accuracy (negative RMSE) vs K,
+  2. synthetic_holdout_vs_k.png - held-out accuracy (negative RMSE) vs K,
      same comparison.
-  3. density_grid.png - grid of p(y|x) plots (rows: K, columns: x in
+  3. density_grid_2d.png - grid of p(y|x) plots (rows: K, columns: x in
      X_SLICES) showing each weighted component density and their sum.
+
+Model-level statistics and per-epoch training histories are saved under
+report/csvs/ and consumed directly by the LaTeX report.
 
 MDN point predictions (for accuracy/R^2) use the mixture mean, i.e. the
 alpha-weighted average of the K component means.
@@ -21,10 +24,13 @@ alpha-weighted average of the K component means.
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import pandas as pd
 import torch
 import torch.nn.functional as F
+from pathlib import Path
 
 from mdn.networks import MDN, RegressionNet, mdn_nll
+from mdn.reporting import write_latex_table
 
 K_VALUES = [1, 2, 3, 4, 5]
 X_SLICES = [-2.0, 0.0, 2.0]
@@ -32,7 +38,9 @@ EPOCHS = 1000
 N_TRAIN, N_HOLDOUT = 4000, 1000
 IN_DIM, OUT_DIM = 1, 1
 HIDDEN, RANK, LR = 128, 1, 1e-3
-PLOT_DIR = "mdn/plots"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+FIG_DIR = PROJECT_ROOT / "report" / "figs"
+CSV_DIR = PROJECT_ROOT / "report" / "csvs"
 
 
 def make_bimodal_data(n, in_dim, out_dim, W1, W2, generator):
@@ -99,15 +107,28 @@ def train_regression(x_train, y_train):
 
 def evaluate_mdn(model, x, y):
     with torch.no_grad():
-        alpha, mu, _ = model(x)
+        alpha, mu, Lambda = model(x)
         pred = mdn_mixture_mean(alpha, mu)
-        return r_squared(pred, y), neg_rmse(pred, y)
+        return {
+            "nll": mdn_nll(alpha, mu, Lambda, y).item(),
+            "rmse": -neg_rmse(pred, y),
+            "r2": r_squared(pred, y),
+        }
 
 
 def evaluate_regression(model, x, y):
     with torch.no_grad():
         pred = model(x)
-        return r_squared(pred, y), neg_rmse(pred, y)
+        return {
+            "mse": F.mse_loss(pred, y).item(),
+            "rmse": -neg_rmse(pred, y),
+            "r2": r_squared(pred, y),
+        }
+
+
+def metric(value):
+    """Format a metric consistently for both CSV output and LaTeX display."""
+    return "N/A" if value is None else f"{value:.6f}"
 
 
 def plot_raw_data(x_data, y_data):
@@ -121,7 +142,7 @@ def plot_raw_data(x_data, y_data):
     axes[-1].set_xlabel("x")
     fig.suptitle("Raw training data")
     fig.tight_layout()
-    fig.savefig(f"{PLOT_DIR}/raw_data.png", dpi=150)
+    fig.savefig(FIG_DIR / "synthetic_raw_data.png", dpi=150)
     plt.close(fig)
 
 
@@ -172,13 +193,13 @@ def plot_density_grid(models_by_k, x_slices, n_grid=300):
 
     fig.suptitle("Predicted mixture density p(y|x) across K and x")
     fig.tight_layout()
-    fig.savefig(f"{PLOT_DIR}/density_grid.png", dpi=150)
+    fig.savefig(FIG_DIR / "density_grid_2d.png", dpi=150)
     plt.close(fig)
 
 
 def main():
-    import os
-    os.makedirs(PLOT_DIR, exist_ok=True)
+    FIG_DIR.mkdir(parents=True, exist_ok=True)
+    CSV_DIR.mkdir(parents=True, exist_ok=True)
 
     torch.manual_seed(0)
     W1, W2 = torch.randn(IN_DIM, OUT_DIM), torch.randn(IN_DIM, OUT_DIM)
@@ -190,15 +211,73 @@ def main():
     plot_raw_data(x_train, y_train)
 
     reg_model, reg_loss_curve, reg_acc_curve = train_regression(x_train, y_train)
-    reg_r2, reg_acc = evaluate_regression(reg_model, x_holdout, y_holdout)
-    print(f"RegressionNet  holdout R^2={reg_r2:.4f}  holdout neg-RMSE={reg_acc:.4f}")
+    reg_train = evaluate_regression(reg_model, x_train, y_train)
+    reg_test = evaluate_regression(reg_model, x_holdout, y_holdout)
+    print(f"RegressionNet  holdout R^2={reg_test['r2']:.4f}  "
+          f"holdout neg-RMSE={-reg_test['rmse']:.4f}")
 
     mdn_results = {}
     for K in K_VALUES:
         model, loss_curve, acc_curve = train_mdn(K, x_train, y_train)
-        r2, acc = evaluate_mdn(model, x_holdout, y_holdout)
-        mdn_results[K] = dict(model=model, loss_curve=loss_curve, acc_curve=acc_curve, r2=r2, acc=acc)
-        print(f"MDN K={K}  holdout R^2={r2:.4f}  holdout neg-RMSE={acc:.4f}")
+        train_metrics = evaluate_mdn(model, x_train, y_train)
+        test_metrics = evaluate_mdn(model, x_holdout, y_holdout)
+        mdn_results[K] = dict(
+            model=model,
+            loss_curve=loss_curve,
+            acc_curve=acc_curve,
+            train=train_metrics,
+            test=test_metrics,
+        )
+        print(f"MDN K={K}  holdout R^2={test_metrics['r2']:.4f}  "
+              f"holdout neg-RMSE={-test_metrics['rmse']:.4f}")
+
+    summary_rows = [{
+        "model": "Deterministic",
+        "k": "---",
+        "train_nll": "N/A",
+        "test_nll": "N/A",
+        "train_rmse": metric(reg_train["rmse"]),
+        "test_rmse": metric(reg_test["rmse"]),
+        "train_r2": metric(reg_train["r2"]),
+        "test_r2": metric(reg_test["r2"]),
+        "train_mse": metric(reg_train["mse"]),
+        "test_mse": metric(reg_test["mse"]),
+    }]
+    for K in K_VALUES:
+        train_metrics = mdn_results[K]["train"]
+        test_metrics = mdn_results[K]["test"]
+        summary_rows.append({
+            "model": "Single Gaussian" if K == 1 else "MDN",
+            "k": str(K),
+            "train_nll": metric(train_metrics["nll"]),
+            "test_nll": metric(test_metrics["nll"]),
+            "train_rmse": metric(train_metrics["rmse"]),
+            "test_rmse": metric(test_metrics["rmse"]),
+            "train_r2": metric(train_metrics["r2"]),
+            "test_r2": metric(test_metrics["r2"]),
+            "train_mse": metric(train_metrics["rmse"] ** 2),
+            "test_mse": metric(test_metrics["rmse"] ** 2),
+        })
+    summary_path = CSV_DIR / "synthetic_summary.csv"
+    pd.DataFrame(summary_rows).to_csv(summary_path, index=False)
+    write_latex_table(summary_path)
+
+    history_rows = []
+    for epoch, (loss, acc) in enumerate(zip(reg_loss_curve, reg_acc_curve), start=1):
+        history_rows.append({
+            "model": "Deterministic", "k": "", "epoch": epoch,
+            "loss_name": "MSE", "train_loss": loss, "train_rmse": -acc,
+        })
+    for K in K_VALUES:
+        model_name = "Single Gaussian" if K == 1 else "MDN"
+        for epoch, (loss, acc) in enumerate(
+                zip(mdn_results[K]["loss_curve"], mdn_results[K]["acc_curve"]), start=1):
+            history_rows.append({
+                "model": model_name, "k": K, "epoch": epoch,
+                "loss_name": "NLL", "train_loss": loss, "train_rmse": -acc,
+            })
+    pd.DataFrame(history_rows).to_csv(
+        CSV_DIR / "synthetic_training_history.csv", index=False)
 
     plot_density_grid({K: mdn_results[K]["model"] for K in K_VALUES}, X_SLICES)
 
@@ -221,20 +300,24 @@ def main():
     ax_acc.set_title("Training accuracy vs epoch")
     ax_acc.legend()
     fig.tight_layout()
-    fig.savefig(f"{PLOT_DIR}/loss_accuracy_vs_epoch.png", dpi=150)
+    fig.savefig(FIG_DIR / "synthetic_training.png", dpi=150)
+    plt.close(fig)
 
     fig3, ax3 = plt.subplots(figsize=(6, 5))
-    ax3.plot(K_VALUES, [mdn_results[K]["acc"] for K in K_VALUES], marker="o", label="MDN")
-    ax3.axhline(reg_acc, color="black", linestyle="--", label="RegressionNet")
+    ax3.plot(K_VALUES, [-mdn_results[K]["test"]["rmse"] for K in K_VALUES],
+             marker="o", label="MDN")
+    ax3.axhline(-reg_test["rmse"], color="black", linestyle="--", label="RegressionNet")
     ax3.set_xlabel("K (number of mixture components)")
     ax3.set_ylabel("held-out accuracy (negative RMSE)")
     ax3.set_title("Held-out accuracy vs K")
     ax3.set_xticks(K_VALUES)
     ax3.legend()
     fig3.tight_layout()
-    fig3.savefig(f"{PLOT_DIR}/holdout_accuracy_vs_k.png", dpi=150)
+    fig3.savefig(FIG_DIR / "synthetic_holdout_vs_k.png", dpi=150)
+    plt.close(fig3)
 
-    print(f"Plots saved to {PLOT_DIR}/")
+    print(f"Plots saved to {FIG_DIR}")
+    print(f"Statistics saved to {CSV_DIR}")
 
 
 if __name__ == "__main__":

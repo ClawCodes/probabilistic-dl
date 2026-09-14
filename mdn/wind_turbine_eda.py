@@ -12,20 +12,24 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+from pathlib import Path
 
-DATA_PATH = "data/wind-turbine-scada-dataset/T1.csv"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_PATH = PROJECT_ROOT / "data" / "wind-turbine-scada-dataset" / "T1.csv"
 TARGET = "LV ActivePower (kW)"
-PLOT_DIR = "mdn/plots/wind_turbine"
+FIG_DIR = PROJECT_ROOT / "report" / "figs"
+CSV_DIR = PROJECT_ROOT / "report" / "csvs"
 
 
 def main():
-    import os
-    os.makedirs(PLOT_DIR, exist_ok=True)
+    FIG_DIR.mkdir(parents=True, exist_ok=True)
+    CSV_DIR.mkdir(parents=True, exist_ok=True)
 
     df = pd.read_csv(DATA_PATH)
+    df.describe().transpose().to_csv(CSV_DIR / "wind_turbine_data_summary.csv")
     features = [c for c in df.columns if c not in (TARGET, "Date/Time")]
 
-    fig, axes = plt.subplots(len(features), 1, figsize=(7, 4 * len(features)))
+    fig, axes = plt.subplots(1, len(features), figsize=(5 * len(features), 4))
     axes = [axes] if len(features) == 1 else axes
     for ax, feature in zip(axes, features):
         ax.scatter(df[feature], df[TARGET], s=3, alpha=0.15, color="gray")
@@ -33,9 +37,11 @@ def main():
         ax.set_ylabel(TARGET)
         ax.set_title(f"{TARGET} vs {feature}")
     fig.tight_layout()
-    fig.savefig(f"{PLOT_DIR}/feature_vs_active_power.png", dpi=150)
+    output_path = FIG_DIR / "wind_turbine_features.png"
+    fig.savefig(output_path, dpi=150)
     plt.close(fig)
-    print(f"Plot saved to {PLOT_DIR}/feature_vs_active_power.png")
+    print(f"Plot saved to {output_path}")
+    print(f"Data summary saved to {CSV_DIR / 'wind_turbine_data_summary.csv'}")
 
 
 if __name__ == "__main__":
