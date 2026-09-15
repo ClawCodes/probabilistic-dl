@@ -16,6 +16,12 @@ Produces:
     each weighted component density and their sum, in real kW units.
   - report/csvs/wind_turbine_summary.csv: final train/test metrics.
   - report/csvs/wind_turbine_training_history.csv: per-epoch metrics.
+  - report/figs/curve_overlay_wind_turbine.png: RegressionNet's predicted
+    curve vs each MDN's predicted component mean +/- std curves, swept over
+    wind speed at a fixed representative direction, overlaid on the raw
+    scatter in that direction band. One row per K.
+  - report/figs/curve_overlay_direction_wind_turbine.png: same style, but
+    swept over wind direction at a fixed representative (mid-ramp) speed.
 """
 
 import matplotlib
@@ -40,6 +46,20 @@ CSV_DIR = PROJECT_ROOT / "report" / "csvs"
 # the EDA scatter showed the clearest normal-vs-curtailed bimodality, all at
 # the dominant wind direction cluster (~50 deg).
 X_SLICES_RAW = [(5.0, 50.0), (9.0, 50.0), (13.0, 50.0)]
+
+# Wind direction band used for the speed-sweep curve-overlay plot: fixes
+# direction at the dominant cluster (~50 deg) so a 2D (speed, direction)
+# model can be swept over speed alone and compared against a matching data
+# scatter.
+OVERLAY_DIRECTION_CENTER = 50.0
+OVERLAY_DIRECTION_HALFWIDTH = 10.0
+
+# Wind speed band used for the direction-sweep curve-overlay plot: fixes
+# speed at the mid-ramp region (~9 m/s), the same regime X_SLICES_RAW
+# flagged as most bimodal, so sweeping direction there is most likely to
+# reveal a direction-dependent split.
+OVERLAY_SPEED_CENTER = 9.0
+OVERLAY_SPEED_HALFWIDTH = 1.0
 
 K_VALUES = [1, 2, 3, 4, 5]
 EPOCHS = 300
@@ -206,6 +226,78 @@ def plot_density_grid(models_by_k, x_slices_raw, x_mean, x_std, y_mean, y_std, n
     plt.close(fig)
 
 
+def plot_curve_overlay(models_by_k, reg_model, x_scatter_raw, y_scatter_raw,
+                        x_mean, x_std, y_mean, y_std,
+                        sweep_index, fixed_value, fixed_halfwidth,
+                        output_name, n_grid=200):
+    """Hold one input feature fixed (within fixed_halfwidth, for filtering
+    the scatter) and sweep the other (FEATURES[sweep_index]) across its
+    observed range, overlaying:
+      - RegressionNet's single predicted curve (black dashed)
+      - each MDN's K component mean +/- 1 std curves (colored)
+    on top of a scatter of the real data restricted to the fixed-feature
+    band. One row per K, all in real kW units."""
+    fixed_index = 1 - sweep_index
+    k_values = sorted(models_by_k)
+    sweep_col, fixed_col = x_scatter_raw[:, sweep_index], x_scatter_raw[:, fixed_index]
+    in_band = (fixed_col - fixed_value).abs() <= fixed_halfwidth
+    sweep_band, power_band = sweep_col[in_band], y_scatter_raw[in_band, 0]
+
+    sweep_grid = torch.linspace(sweep_band.min().item(), sweep_band.max().item(), n_grid)
+    x_grid_raw = torch.empty(n_grid, 2)
+    x_grid_raw[:, sweep_index] = sweep_grid
+    x_grid_raw[:, fixed_index] = fixed_value
+    x_grid = (x_grid_raw - x_mean) / x_std
+    y_mean_v, y_std_v = y_mean.item(), y_std.item()
+
+    with torch.no_grad():
+        reg_pred_kw = reg_model(x_grid) * y_std_v + y_mean_v  # (n_grid, 1)
+
+    colors = plt.cm.tab10.colors
+    fig, axes = plt.subplots(len(k_values), 1, figsize=(8, 3.5 * len(k_values)), squeeze=False)
+    axes = [ax[0] for ax in axes]
+
+    # Fix the y-range to the real data span (with padding) rather than
+    # autoscaling: a spare/near-degenerate component can have a wildly
+    # inflated predicted std in regions it doesn't own, which would
+    # otherwise blow out the axis and hide the actual fit.
+    power_min, power_max = power_band.min().item(), power_band.max().item()
+    padding = 0.1 * (power_max - power_min)
+    y_lo, y_hi = power_min - padding, power_max + padding
+
+    for row, K in enumerate(k_values):
+        ax = axes[row]
+        ax.scatter(sweep_band.numpy(), power_band.numpy(), s=6, alpha=0.15,
+                   color="gray", label="data" if row == 0 else None)
+        ax.plot(sweep_grid.numpy(), reg_pred_kw[:, 0].numpy(), color="black",
+                linewidth=1.8, linestyle="--", label="RegressionNet" if row == 0 else None)
+
+        with torch.no_grad():
+            alpha, mu, Lambda = models_by_k[K](x_grid)             # (n_grid,K), (n_grid,K,1), (n_grid,K,1,1)
+        mu_kw = mu[:, :, 0] * y_std_v + y_mean_v                     # (n_grid, K)
+        std_kw = Lambda[:, :, 0, 0].reciprocal().sqrt() * y_std_v    # (n_grid, K)
+
+        for k in range(K):
+            color = colors[k % len(colors)]
+            mean_k, std_k = mu_kw[:, k].numpy(), std_kw[:, k].numpy()
+            avg_weight = alpha[:, k].mean().item()
+            ax.plot(sweep_grid.numpy(), mean_k, color=color, linewidth=1.5,
+                    label=f"MDN component {k} (avg weight={avg_weight:.2f})" if row == 0 else None)
+            ax.fill_between(sweep_grid.numpy(), mean_k - std_k, mean_k + std_k, color=color, alpha=0.15)
+
+        ax.set_ylim(y_lo, y_hi)
+        ax.set_ylabel("ActivePower (kW)")
+        ax.set_title(f"K={K}", fontsize=10)
+    axes[-1].set_xlabel(FEATURES[sweep_index])
+    axes[0].legend(fontsize=7, loc="upper left")
+
+    fig.suptitle(f"RegressionNet vs MDN predicted components "
+                 f"({FEATURES[fixed_index]}={fixed_value:g}±{fixed_halfwidth:g})")
+    fig.tight_layout()
+    fig.savefig(FIG_DIR / output_name, dpi=150)
+    plt.close(fig)
+
+
 def main():
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     CSV_DIR.mkdir(parents=True, exist_ok=True)
@@ -310,6 +402,20 @@ def main():
     plot_density_grid({K: mdn_results[K]["model"] for K in K_VALUES},
                        X_SLICES_RAW, x_mean, x_std, y_mean, y_std)
     print(f"Plot saved to {FIG_DIR / 'density_grid_wind_turbine.png'}")
+
+    plot_curve_overlay({K: mdn_results[K]["model"] for K in K_VALUES}, reg_model,
+                        x_train_raw, y_train_raw, x_mean, x_std, y_mean, y_std,
+                        sweep_index=0, fixed_value=OVERLAY_DIRECTION_CENTER,
+                        fixed_halfwidth=OVERLAY_DIRECTION_HALFWIDTH,
+                        output_name="curve_overlay_wind_turbine.png")
+    print(f"Plot saved to {FIG_DIR / 'curve_overlay_wind_turbine.png'}")
+
+    plot_curve_overlay({K: mdn_results[K]["model"] for K in K_VALUES}, reg_model,
+                        x_train_raw, y_train_raw, x_mean, x_std, y_mean, y_std,
+                        sweep_index=1, fixed_value=OVERLAY_SPEED_CENTER,
+                        fixed_halfwidth=OVERLAY_SPEED_HALFWIDTH,
+                        output_name="curve_overlay_direction_wind_turbine.png")
+    print(f"Plot saved to {FIG_DIR / 'curve_overlay_direction_wind_turbine.png'}")
     print(f"Statistics saved to {CSV_DIR}")
 
 

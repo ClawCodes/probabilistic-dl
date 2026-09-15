@@ -13,6 +13,9 @@ Produces the following plots, saved directly under report/figs/:
      same comparison.
   3. density_grid_2d.png - grid of p(y|x) plots (rows: K, columns: x in
      X_SLICES) showing each weighted component density and their sum.
+  4. synthetic_curve_overlay.png - RegressionNet's predicted curve vs each
+     MDN's predicted component mean +/- std curves, swept over x, overlaid
+     on the raw training scatter. One row per K.
 
 Model-level statistics and per-epoch training histories are saved under
 report/csvs/ and consumed directly by the LaTeX report.
@@ -197,6 +200,63 @@ def plot_density_grid(models_by_k, x_slices, n_grid=300):
     plt.close(fig)
 
 
+def plot_curve_overlay(models_by_k, reg_model, x_data, y_data, n_grid=200):
+    """Sweep x over its observed range and overlay:
+      - RegressionNet's single predicted curve (black dashed)
+      - each MDN's K component mean +/- 1 std curves (colored)
+    on top of a scatter of the real (x, y) data. One row per K."""
+    k_values = sorted(models_by_k)
+    x_flat, y_flat = x_data[:, 0], y_data[:, 0]
+    x_grid = torch.linspace(x_flat.min().item(), x_flat.max().item(), n_grid).unsqueeze(-1)
+
+    with torch.no_grad():
+        reg_pred = reg_model(x_grid)  # (n_grid, 1)
+
+    colors = plt.cm.tab10.colors
+    fig, axes = plt.subplots(len(k_values), 1, figsize=(8, 3.5 * len(k_values)), squeeze=False)
+    axes = [ax[0] for ax in axes]
+
+    # Fix the y-range to the real data span (with padding) rather than
+    # autoscaling: a spare/near-degenerate component can have a wildly
+    # inflated predicted std in regions it doesn't own, which would
+    # otherwise blow out the axis and hide the actual fit.
+    y_min, y_max = y_flat.min().item(), y_flat.max().item()
+    padding = 0.1 * (y_max - y_min)
+    y_lo, y_hi = y_min - padding, y_max + padding
+
+    for row, K in enumerate(k_values):
+        ax = axes[row]
+        ax.scatter(x_flat.numpy(), y_flat.numpy(), s=6, alpha=0.15, color="gray",
+                   label="data" if row == 0 else None)
+        ax.plot(x_grid[:, 0].numpy(), reg_pred[:, 0].numpy(), color="black",
+                linewidth=1.8, linestyle="--", label="RegressionNet" if row == 0 else None)
+
+        with torch.no_grad():
+            alpha, mu, Lambda = models_by_k[K](x_grid)          # (n_grid,K), (n_grid,K,1), (n_grid,K,1,1)
+        mu_k = mu[:, :, 0]                                       # (n_grid, K)
+        std_k = Lambda[:, :, 0, 0].reciprocal().sqrt()           # (n_grid, K)
+
+        for k in range(K):
+            color = colors[k % len(colors)]
+            mean_k, std_k_np = mu_k[:, k].numpy(), std_k[:, k].numpy()
+            avg_weight = alpha[:, k].mean().item()
+            ax.plot(x_grid[:, 0].numpy(), mean_k, color=color, linewidth=1.5,
+                    label=f"MDN component {k} (avg weight={avg_weight:.2f})" if row == 0 else None)
+            ax.fill_between(x_grid[:, 0].numpy(), mean_k - std_k_np, mean_k + std_k_np,
+                            color=color, alpha=0.15)
+
+        ax.set_ylim(y_lo, y_hi)
+        ax.set_ylabel("y")
+        ax.set_title(f"K={K}", fontsize=10)
+    axes[-1].set_xlabel("x")
+    axes[0].legend(fontsize=7, loc="upper left")
+
+    fig.suptitle("RegressionNet vs MDN predicted components")
+    fig.tight_layout()
+    fig.savefig(FIG_DIR / "synthetic_curve_overlay.png", dpi=150)
+    plt.close(fig)
+
+
 def main():
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     CSV_DIR.mkdir(parents=True, exist_ok=True)
@@ -280,6 +340,7 @@ def main():
         CSV_DIR / "synthetic_training_history.csv", index=False)
 
     plot_density_grid({K: mdn_results[K]["model"] for K in K_VALUES}, X_SLICES)
+    plot_curve_overlay({K: mdn_results[K]["model"] for K in K_VALUES}, reg_model, x_train, y_train)
 
     epochs_axis = range(EPOCHS)
 
