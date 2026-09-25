@@ -16,9 +16,12 @@ day-of-year 1-365) and recomputes both sin and cos together. Wind Speed and
 Wind Direction remain simple scalar sweeps.
 
 Produces:
-  - report/figs/wind_turbine_training.png: training loss and RMSE vs epoch,
-    one curve per K plus the RegressionNet baseline. Train-set only - see
-    wind_turbine_holdout_vs_k.png for held-out performance.
+  - report/figs/wind_turbine_training.png: training NLL vs epoch (MDN only,
+    one curve per K - RegressionNet's MSE isn't on a comparable scale so
+    it's left off this panel) and training RMSE vs epoch (MDN curves plus
+    the RegressionNet baseline - RMSE is the fair cross-model comparison).
+    Train-set only - see wind_turbine_holdout_vs_k.png for held-out
+    performance.
   - report/figs/wind_turbine_holdout_vs_k.png: held-out RMSE vs K, one
     point per MDN plus a reference line for RegressionNet - the per-epoch
     curves above are train-only, so this is the only plot showing whether
@@ -76,6 +79,7 @@ CSV_DIR = PROJECT_ROOT / "report" / "csvs"
 K_VALUES = [1, 2, 3, 4, 5]
 EPOCHS = 300
 HIDDEN, RANK, LR = 128, 1, 1e-3
+BATCH_SIZE = 64
 TRAIN_FRACTION = 0.8
 SEED = 0
 
@@ -229,41 +233,59 @@ def univariate_density(y_grid, mu, std):
 
 
 def train_mdn(K, x_train, y_train, y_mean, y_std):
+    """Minibatch training (BATCH_SIZE, reshuffled every epoch). The logged
+    per-epoch loss/RMSE is evaluated once on the full training set after
+    that epoch's minibatch updates, not the last minibatch's loss - so
+    'epoch' still means one point per curve/history-row downstream, same
+    as before batching was added."""
     torch.manual_seed(SEED)
     model = MDN(in_dim=x_train.shape[1], out_dim=1, hidden=HIDDEN, K=K, rank=RANK)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
     loss_curve, rmse_curve = [], []
     target_kw = unstandardize(y_train, y_mean, y_std)
+    n = x_train.shape[0]
     for _ in range(EPOCHS):
-        alpha, mu, Lambda = model(x_train)
-        loss = mdn_nll(alpha, mu, Lambda, y_train)
-        opt.zero_grad()
-        loss.backward()
-        opt.step()
+        perm = torch.randperm(n)
+        for start in range(0, n, BATCH_SIZE):
+            idx = perm[start:start + BATCH_SIZE]
+            alpha, mu, Lambda = model(x_train[idx])
+            loss = mdn_nll(alpha, mu, Lambda, y_train[idx])
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
 
         with torch.no_grad():
+            alpha, mu, Lambda = model(x_train)
+            epoch_loss = mdn_nll(alpha, mu, Lambda, y_train).item()
             pred_kw = unstandardize(mdn_mixture_mean(alpha, mu), y_mean, y_std)
-        loss_curve.append(loss.item())
+        loss_curve.append(epoch_loss)
         rmse_curve.append(rmse(pred_kw, target_kw))
     return model, loss_curve, rmse_curve
 
 
 def train_regression(x_train, y_train, y_mean, y_std):
+    """Minibatch training, same epoch-level logging convention as train_mdn."""
     torch.manual_seed(SEED)
     model = RegressionNet(in_dim=x_train.shape[1], out_dim=1, hidden=HIDDEN)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
     loss_curve, rmse_curve = [], []
     target_kw = unstandardize(y_train, y_mean, y_std)
+    n = x_train.shape[0]
     for _ in range(EPOCHS):
-        pred = model(x_train)
-        loss = F.mse_loss(pred, y_train)
-        opt.zero_grad()
-        loss.backward()
-        opt.step()
+        perm = torch.randperm(n)
+        for start in range(0, n, BATCH_SIZE):
+            idx = perm[start:start + BATCH_SIZE]
+            pred = model(x_train[idx])
+            loss = F.mse_loss(pred, y_train[idx])
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
 
         with torch.no_grad():
+            pred = model(x_train)
+            epoch_loss = F.mse_loss(pred, y_train).item()
             pred_kw = unstandardize(pred, y_mean, y_std)
-        loss_curve.append(loss.item())
+        loss_curve.append(epoch_loss)
         rmse_curve.append(rmse(pred_kw, target_kw))
     return model, loss_curve, rmse_curve
 
@@ -617,12 +639,18 @@ def main():
     epochs_axis = range(EPOCHS)
     fig, (ax_loss, ax_rmse) = plt.subplots(1, 2, figsize=(12, 5))
 
+    # RegressionNet is deliberately left off this panel: its MSE and the
+    # MDN's NLL are different loss functions on different scales (NLL can be
+    # negative, MSE can't), so overlaying them on one axis would invite a
+    # cross-model "lower curve wins" reading that isn't valid. The RMSE
+    # panel below is the fair cross-model comparison (same kW units for
+    # every model regardless of training objective); this panel is only
+    # for checking each MDN's own NLL is converging.
     for K in K_VALUES:
         ax_loss.plot(epochs_axis, mdn_results[K]["loss_curve"], label=f"MDN K={K}")
-    ax_loss.plot(epochs_axis, reg_loss_curve, label="RegressionNet (MSE)", color="black", linestyle="--")
     ax_loss.set_xlabel("epoch")
-    ax_loss.set_ylabel("training loss")
-    ax_loss.set_title("Training loss vs epoch")
+    ax_loss.set_ylabel("training NLL")
+    ax_loss.set_title("Training NLL vs epoch")
     ax_loss.legend(fontsize=8)
 
     for K in K_VALUES:

@@ -29,7 +29,8 @@
   }\par
 }
 
-% Render images side by side
+% Render single images side by side
+% don't use for tall images (like overlay plots)
 \newcommand{\reportfigurepair}[4]{%
   \begin{figure}[tb]
   \centering
@@ -60,6 +61,43 @@
   \label{#4}
   \end{figure}
 }
+
+% Two TALL images (e.g. one row per K) side by side under a single caption -
+% width-constrained only, no height cap. A height cap on a tall, narrow
+% image would shrink its width - and legibility - far below the available
+% column width, which is what reportfigurepair's fixed height does to
+% multi-row curve-overlay plots.
+\newcommand{\reportfigurepairtall}[4]{%
+  \begin{figure}[tb]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+  \centering
+  \IfFileExists{figs/#1}{%
+    \includegraphics[width=\linewidth,keepaspectratio]{#1}%
+  }{%
+    \fbox{\parbox[c][0.16\textheight][c]{0.92\linewidth}{%
+      \centering\textcolor{gray!75}{Figure placeholder\\[0.4em]
+      Put \texttt{\detokenize{#1}} in \texttt{figs/}}}%
+    }
+  }
+  \end{minipage}%
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+  \centering
+  \IfFileExists{figs/#2}{%
+    \includegraphics[width=\linewidth,keepaspectratio]{#2}%
+  }{%
+    \fbox{\parbox[c][0.16\textheight][c]{0.92\linewidth}{%
+      \centering\textcolor{gray!75}{Figure placeholder\\[0.4em]
+      Put \texttt{\detokenize{#2}} in \texttt{figs/}}}%
+    }
+  }
+  \end{minipage}
+  \caption{#3}
+  \label{#4}
+  \end{figure}
+}
+
 
 % Includes an image when it exists and otherwise leaves a compile-safe box.
 % Usage: \reportfigure{filename.png}{Caption text.}{fig:label}
@@ -124,8 +162,6 @@ synthetic task, showing the multiple output modes associated with the input.}
 modes captured by the MDN and how their locations, weights, and widths vary with
 the input.}{fig:density-grid-2d}
 
-
-
 \reportfigure{synthetic_training.png}{Training objective and RMSE across epochs
 for the deterministic baseline, single-Gaussian model, and MDNs with different
 numbers of components.}
@@ -183,10 +219,21 @@ heteroscedasticity before fitting the models.}
 direction (right).}
 {fig:wind-conditional-histograms}
 
-\reportfigure{density_grid_wind_turbine.png}{Learned conditional density for the
-wind-turbine task over a grid of inputs and active-power outputs. Use this view
-to show heteroscedasticity, multiple operating regimes, and regions where the
-model assigns diffuse or multimodal probability.}{fig:density-grid-wind}
+Using the same model architectures, adapted to the higher-dimensional input, and training recipe as the synthetic 2D example (Adam, batch size: 64, epochs: 300), we performed an 80/20 train/test split via a random sampling.
+We observed the train and test loss (NLL for the MDNs and MSE for the regression model) and RMSE for both model families across $K$, shown in Table~\ref{tab:wind-results} and Figures~\ref{fig:wind-training}.
+Training NLL for the MDNs improves fairly consistently as $K$ increases with a small non-monotonic dip at $k=4$, the same pattern is also observed in the test set.
+Broadly this training pattern was expected as additional mixture components let the model dedicate separate, narrower gaussian's to different modes rather than forcing a single gaussian to cover the full spread of outcomes.
+We believe the small dip at $k=4$ simply reflects the non-convexity of the optimization rather than a violation of the expectation that increasing $k$ provides more mode coverage.
+In comparing RMSE, the regression model achieves the best test RMSE of any model (195.93 kW), beating even the best MDN ($K=5$, 223.37 kW).
+Since the regression model is trained to directly minimize MSE, this is expected as the MDNs mixture mean is a byproduct of maximizing the likelihood, and MSE is not the objective its training was directly optimizing for.
+When the MDN correctly discovers separated modes, the mixture mean will fall in the low-density region between the modes which serves as a poor point estimate for either mode.
+Thus, a model that better captures the real multimodality of the data can therefore look worse under RMSE than one that never attempts to represent different modes.
+
+Comparing the train and test columns of Table~\ref{tab:wind-results} further shows that the models generalize differently.
+The single gaussian model ($K=1$) has a smaller train test gap (289.54 to 293.17 kW) but by far the worst RMSE overall.
+This suggests the MDN with $K=1$ is an underfit model as a single unimodal gaussian cannot represent the multi modality observed in our exploratory data analysis, thus the small increase in test RMSE may appear that it generalizes well, but this is largely because it describes the data poorly to begin with.
+In contrast, the regression model shows the best overall train RMSE, but the jump in RMSE on the test set suggests it generalizes poorly.
+The MDNs with $K\geq2$ sit in between these models, fitting more closely than the single gaussian without the same degree of overfitting observed with the regression model.
 
 \begin{table}[tb]
   \centering
@@ -202,12 +249,35 @@ model assigns diffuse or multimodal probability.}{fig:density-grid-wind}
 for the realistic-data models, including the selected checkpoint or stopping
 point.}{fig:wind-training}
 
-\answerbox{Compare training and test behavior on the realistic dataset. Discuss
-generalization gaps, predictive sharpness and calibration, regions of high
-uncertainty, the effect of $K$, and how conclusions differ from the controlled
-synthetic example. Reference Figures~\ref{fig:wind-features} and
-\ref{fig:density-grid-wind}, Figure~\ref{fig:wind-training}, and
-Table~\ref{tab:wind-results}.}{7\baselineskip}
+Each curve overlay plot, Figures~\ref{fig:wind-curve-overlay-speed-direction} and \ref{fig:wind-curve-overlay-hour-doy}, is produced by a fix-sweep approach: a sequence of point queries in which the feature under inspection is varied across a grad of 200 values spanning its domain, while every other input feature is held fixed at a single representative value (wind speed = 9 m/s, wind direction = $50^\circ$, hour-of-day = 12:00, day-of-year = 182) rather than allowed to vary.
+At each of the 200 points we query the trained MDN and regression models.
+The resulting means, $\pm1$ std bands, and regression predictions are plotted as a function of the swept feature.
+The dashed line is the regression prediction and the colored bands are the $\pm1$ std bands for each $K$ in the given MDN model.
+
+Note that each curve overlay plot only reports a single fixed value, for example ``Wind Direction ($^\circ$) = $50\pm10$'' in the wind-speed sweep.
+These values denote the point and tolerance values used to restrict the raw training points that are plotted alongside the model curves, thus each plot only contains a small representative sample of the raw data.
+Every other feature not named in the figure title is left unfiltered, thus the raw data scatter is not conditioned the same across each curve overlay plot.
+
+The plots let us check feature by feature, whether the MDN's components are modeling real modes or fitting frivolous guassians that overall to not contribute strongly to the mixture.
+Each component $k$ carries a mixture weight $\pi_k(\mathbf{x}) \in [0,1]$, with $\sum_k \pi_k(\mathbf{x}) = 1$: this is the fraction of predicted probability assigned to that component at input $\mathbf{x}$.
+A components mean can move substantially across a sweep while its weight stays near zero, in which case the gaussian does not contribute strongly to the model's overall predictive power.
+So, we read weight and mean together rather than judging multimodality from the banded curves alone.
+
+\reportfigurepairtall{curve_overlay_speed_wind_turbine.png}{curve_overlay_direction_wind_turbine.png}
+  {RegressionNet's predicted curve vs. each MDN's predicted component means
+  (colored, $\pm1$ std shaded) swept over wind speed (left) and wind
+  direction (right), one row per $K$, overlaid on real data restricted to a
+  representative band of one other feature.}
+  {fig:wind-curve-overlay-speed-direction}
+
+\reportfigurepairtall{curve_overlay_hour_wind_turbine.png}{curve_overlay_doy_wind_turbine.png}
+{Same style, swept over hour-of-day (left) and day-of-year (right).}
+{fig:wind-curve-overlay-hour-doy}
+
+\reportfigure{density_grid_wind_turbine.png}{Learned conditional density for the
+wind-turbine task over a grid of inputs and active-power outputs. Use this view
+to show heteroscedasticity, multiple operating regimes, and regions where the
+model assigns diffuse or multimodal probability.}{fig:density-grid-wind}
 
 \section{Conclusion}
 
