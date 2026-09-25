@@ -6,11 +6,11 @@ generative process: two linear modes mixed 50/50, plus small Gaussian noise).
 Produces the following plots, saved directly under report/figs/:
   0. synthetic_raw_data.png - scatter of the raw training data, x vs each output
      dimension, no model overlay.
-  1. synthetic_training.png - training loss (MDN: NLL, Regression: MSE)
-     and training accuracy (negative RMSE) vs epoch, one curve per K plus the
-     RegressionNet baseline.
-  2. synthetic_holdout_vs_k.png - held-out accuracy (negative RMSE) vs K,
-     same comparison.
+  1. synthetic_training.png - training NLL vs epoch (MDN only, one curve
+     per K - RegressionNet's MSE isn't on a comparable scale so it's left
+     off this panel) and training RMSE vs epoch (MDN curves plus the
+     RegressionNet baseline - RMSE is the fair cross-model comparison).
+  2. synthetic_holdout_vs_k.png - held-out RMSE vs K, same comparison.
   3. density_grid_2d.png - grid of p(y|x) plots (rows: K, columns: x in
      X_SLICES) showing each weighted component density and their sum.
   4. synthetic_curve_overlay.png - RegressionNet's predicted curve vs each
@@ -37,10 +37,11 @@ from mdn.reporting import write_latex_table
 
 K_VALUES = [1, 2, 3, 4, 5]
 X_SLICES = [-2.0, 0.0, 2.0]
-EPOCHS = 1000
+EPOCHS = 300
 N_TRAIN, N_HOLDOUT = 4000, 1000
 IN_DIM, OUT_DIM = 1, 1
 HIDDEN, RANK, LR = 128, 1, 1e-3
+BATCH_SIZE = 64
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FIG_DIR = PROJECT_ROOT / "report" / "figs"
 CSV_DIR = PROJECT_ROOT / "report" / "csvs"
@@ -56,8 +57,8 @@ def make_bimodal_data(n, in_dim, out_dim, W1, W2, generator):
     return x, y
 
 
-def neg_rmse(pred, target):
-    return -torch.sqrt(F.mse_loss(pred, target)).item()
+def rmse(pred, target):
+    return torch.sqrt(F.mse_loss(pred, target)).item()
 
 
 def r_squared(pred, target):
@@ -71,41 +72,58 @@ def mdn_mixture_mean(alpha, mu):
 
 
 def train_mdn(K, x_train, y_train):
+    """Minibatch training (BATCH_SIZE, reshuffled every epoch). The logged
+    per-epoch loss/accuracy is evaluated once on the full training set after
+    that epoch's minibatch updates, not the last minibatch's loss - so
+    'epoch' still means one point per curve, same as before batching."""
     torch.manual_seed(0)
     model = MDN(in_dim=IN_DIM, out_dim=OUT_DIM, hidden=HIDDEN, K=K, rank=RANK)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
-    loss_curve, acc_curve = [], []
+    loss_curve, rmse_curve = [], []
+    n = x_train.shape[0]
     for _ in range(EPOCHS):
-        alpha, mu, Lambda = model(x_train)
-        loss = mdn_nll(alpha, mu, Lambda, y_train)
-        opt.zero_grad()
-        loss.backward()
-        opt.step()
+        perm = torch.randperm(n)
+        for start in range(0, n, BATCH_SIZE):
+            idx = perm[start:start + BATCH_SIZE]
+            alpha, mu, Lambda = model(x_train[idx])
+            loss = mdn_nll(alpha, mu, Lambda, y_train[idx])
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
 
         with torch.no_grad():
-            acc = neg_rmse(mdn_mixture_mean(alpha, mu), y_train)
-        loss_curve.append(loss.item())
-        acc_curve.append(acc)
-    return model, loss_curve, acc_curve
+            alpha, mu, Lambda = model(x_train)
+            epoch_loss = mdn_nll(alpha, mu, Lambda, y_train).item()
+            epoch_rmse = rmse(mdn_mixture_mean(alpha, mu), y_train)
+        loss_curve.append(epoch_loss)
+        rmse_curve.append(epoch_rmse)
+    return model, loss_curve, rmse_curve
 
 
 def train_regression(x_train, y_train):
+    """Minibatch training, same epoch-level logging convention as train_mdn."""
     torch.manual_seed(0)
     model = RegressionNet(in_dim=IN_DIM, out_dim=OUT_DIM, hidden=HIDDEN)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
-    loss_curve, acc_curve = [], []
+    loss_curve, rmse_curve = [], []
+    n = x_train.shape[0]
     for _ in range(EPOCHS):
-        pred = model(x_train)
-        loss = F.mse_loss(pred, y_train)
-        opt.zero_grad()
-        loss.backward()
-        opt.step()
+        perm = torch.randperm(n)
+        for start in range(0, n, BATCH_SIZE):
+            idx = perm[start:start + BATCH_SIZE]
+            pred = model(x_train[idx])
+            loss = F.mse_loss(pred, y_train[idx])
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
 
         with torch.no_grad():
-            acc = neg_rmse(pred, y_train)
-        loss_curve.append(loss.item())
-        acc_curve.append(acc)
-    return model, loss_curve, acc_curve
+            pred = model(x_train)
+            epoch_loss = F.mse_loss(pred, y_train).item()
+            epoch_rmse = rmse(pred, y_train)
+        loss_curve.append(epoch_loss)
+        rmse_curve.append(epoch_rmse)
+    return model, loss_curve, rmse_curve
 
 
 def evaluate_mdn(model, x, y):
@@ -114,7 +132,7 @@ def evaluate_mdn(model, x, y):
         pred = mdn_mixture_mean(alpha, mu)
         return {
             "nll": mdn_nll(alpha, mu, Lambda, y).item(),
-            "rmse": -neg_rmse(pred, y),
+            "rmse": rmse(pred, y),
             "r2": r_squared(pred, y),
         }
 
@@ -124,7 +142,7 @@ def evaluate_regression(model, x, y):
         pred = model(x)
         return {
             "mse": F.mse_loss(pred, y).item(),
-            "rmse": -neg_rmse(pred, y),
+            "rmse": rmse(pred, y),
             "r2": r_squared(pred, y),
         }
 
@@ -270,26 +288,26 @@ def main():
 
     plot_raw_data(x_train, y_train)
 
-    reg_model, reg_loss_curve, reg_acc_curve = train_regression(x_train, y_train)
+    reg_model, reg_loss_curve, reg_rmse_curve = train_regression(x_train, y_train)
     reg_train = evaluate_regression(reg_model, x_train, y_train)
     reg_test = evaluate_regression(reg_model, x_holdout, y_holdout)
     print(f"RegressionNet  holdout R^2={reg_test['r2']:.4f}  "
-          f"holdout neg-RMSE={-reg_test['rmse']:.4f}")
+          f"holdout RMSE={reg_test['rmse']:.4f}")
 
     mdn_results = {}
     for K in K_VALUES:
-        model, loss_curve, acc_curve = train_mdn(K, x_train, y_train)
+        model, loss_curve, rmse_curve = train_mdn(K, x_train, y_train)
         train_metrics = evaluate_mdn(model, x_train, y_train)
         test_metrics = evaluate_mdn(model, x_holdout, y_holdout)
         mdn_results[K] = dict(
             model=model,
             loss_curve=loss_curve,
-            acc_curve=acc_curve,
+            rmse_curve=rmse_curve,
             train=train_metrics,
             test=test_metrics,
         )
         print(f"MDN K={K}  holdout R^2={test_metrics['r2']:.4f}  "
-              f"holdout neg-RMSE={-test_metrics['rmse']:.4f}")
+              f"holdout RMSE={test_metrics['rmse']:.4f}")
 
     summary_rows = [{
         "model": "Deterministic",
@@ -323,18 +341,18 @@ def main():
     write_latex_table(summary_path)
 
     history_rows = []
-    for epoch, (loss, acc) in enumerate(zip(reg_loss_curve, reg_acc_curve), start=1):
+    for epoch, (loss, rmse_val) in enumerate(zip(reg_loss_curve, reg_rmse_curve), start=1):
         history_rows.append({
             "model": "Deterministic", "k": "", "epoch": epoch,
-            "loss_name": "MSE", "train_loss": loss, "train_rmse": -acc,
+            "loss_name": "MSE", "train_loss": loss, "train_rmse": rmse_val,
         })
     for K in K_VALUES:
         model_name = "Single Gaussian" if K == 1 else "MDN"
-        for epoch, (loss, acc) in enumerate(
-                zip(mdn_results[K]["loss_curve"], mdn_results[K]["acc_curve"]), start=1):
+        for epoch, (loss, rmse_val) in enumerate(
+                zip(mdn_results[K]["loss_curve"], mdn_results[K]["rmse_curve"]), start=1):
             history_rows.append({
                 "model": model_name, "k": K, "epoch": epoch,
-                "loss_name": "NLL", "train_loss": loss, "train_rmse": -acc,
+                "loss_name": "NLL", "train_loss": loss, "train_rmse": rmse_val,
             })
     pd.DataFrame(history_rows).to_csv(
         CSV_DIR / "synthetic_training_history.csv", index=False)
@@ -344,33 +362,39 @@ def main():
 
     epochs_axis = range(EPOCHS)
 
-    fig, (ax_loss, ax_acc) = plt.subplots(1, 2, figsize=(12, 5))
+    # RegressionNet is deliberately left off this panel: its MSE and the
+    # MDN's NLL are different loss functions on different scales (NLL can be
+    # negative, MSE can't), so overlaying them on one axis would invite a
+    # cross-model "lower curve wins" reading that isn't valid. The RMSE
+    # panel below is the fair cross-model comparison (same units for every
+    # model regardless of training objective); this panel is only for
+    # checking each MDN's own NLL is converging.
+    fig, (ax_loss, ax_rmse) = plt.subplots(1, 2, figsize=(12, 5))
     for K in K_VALUES:
         ax_loss.plot(epochs_axis, mdn_results[K]["loss_curve"], label=f"MDN K={K}")
-    ax_loss.plot(epochs_axis, reg_loss_curve, label="RegressionNet", color="black", linestyle="--")
     ax_loss.set_xlabel("epoch")
-    ax_loss.set_ylabel("training loss")
-    ax_loss.set_title("Training loss (MDN: NLL, Regression: MSE)")
+    ax_loss.set_ylabel("training NLL")
+    ax_loss.set_title("Training NLL vs epoch")
     ax_loss.legend()
 
     for K in K_VALUES:
-        ax_acc.plot(epochs_axis, mdn_results[K]["acc_curve"], label=f"MDN K={K}")
-    ax_acc.plot(epochs_axis, reg_acc_curve, label="RegressionNet", color="black", linestyle="--")
-    ax_acc.set_xlabel("epoch")
-    ax_acc.set_ylabel("training accuracy (negative RMSE)")
-    ax_acc.set_title("Training accuracy vs epoch")
-    ax_acc.legend()
+        ax_rmse.plot(epochs_axis, mdn_results[K]["rmse_curve"], label=f"MDN K={K}")
+    ax_rmse.plot(epochs_axis, reg_rmse_curve, label="RegressionNet", color="black", linestyle="--")
+    ax_rmse.set_xlabel("epoch")
+    ax_rmse.set_ylabel("training RMSE")
+    ax_rmse.set_title("Training RMSE vs epoch")
+    ax_rmse.legend()
     fig.tight_layout()
     fig.savefig(FIG_DIR / "synthetic_training.png", dpi=150)
     plt.close(fig)
 
     fig3, ax3 = plt.subplots(figsize=(6, 5))
-    ax3.plot(K_VALUES, [-mdn_results[K]["test"]["rmse"] for K in K_VALUES],
+    ax3.plot(K_VALUES, [mdn_results[K]["test"]["rmse"] for K in K_VALUES],
              marker="o", label="MDN")
-    ax3.axhline(-reg_test["rmse"], color="black", linestyle="--", label="RegressionNet")
+    ax3.axhline(reg_test["rmse"], color="black", linestyle="--", label="RegressionNet")
     ax3.set_xlabel("K (number of mixture components)")
-    ax3.set_ylabel("held-out accuracy (negative RMSE)")
-    ax3.set_title("Held-out accuracy vs K")
+    ax3.set_ylabel("held-out RMSE")
+    ax3.set_title("Held-out RMSE vs K")
     ax3.set_xticks(K_VALUES)
     ax3.legend()
     fig3.tight_layout()
