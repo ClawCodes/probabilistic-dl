@@ -1,0 +1,80 @@
+% Draft prose for the remaining gaps in "Higher-dimensional realistic
+% data" and the "Conclusion" section. Ready to paste into main.tex; not
+% wired in itself.
+%
+% Revision note: this version corrects a real error in the previous
+% draft. The wind-speed paragraph there implied the MDN rediscovers the
+% curtailed-vs-on-curve bimodality the EDA hypothesized (Figure
+% fig:wind-conditional-histograms). Checked directly against the trained
+% models: it does not. The "genuine" well-weighted splits found at 9 m/s
+% (K=4) and 13 m/s (K=3) are BOTH components sitting on/near the main
+% trend line, not one curtailed and one on-curve. The actual curtailed
+% mode is real in the data (verified independent of any model) but is
+% represented with far less weight than its true frequency, at every K
+% and speed checked except 13 m/s, where curtailment is rare enough that
+% the mismatch mostly disappears. This is now stated explicitly rather
+% than glossed over.
+
+% ============================================================
+% 1. Curve overlay + weight sweep INTERPRETATION
+%    (goes after the existing weight-definition paragraph, line 292,
+%    and before \reportfigurepairtall{curve_overlay_speed...}, line 296)
+% ============================================================
+
+Wind speed provides the clearest evidence that the MDN discovers real secondary structure, but it is not the structure our exploratory analysis hypothesized.
+Figure~\ref{fig:wind-conditional-histograms} motivated wind speed as multimodal because a fixed-speed slice of the real data shows two clusters: a curtailed, near-zero-power cluster and an on-curve cluster.
+Checking this directly against the trained models, that curtailed mode is represented with far less weight than its true frequency at every $K$ and speed we checked, with one exception.
+At 9 m/s, where 6.7\% of real data points fall below 200 kW, the only component near 0 kW across $K=2$ through $K=5$ is $K=4$'s orange component (mean $-16.5$ kW), carrying just 0.13\% of the mixture weight.
+At 5 m/s, where curtailment is far more common (19.6\% of points below 200 kW), the near-zero component is $K=3$'s green component (mean 10 kW, 2.3\% weight), $K=4$'s orange component (mean $-10$ kW, 2.4\% weight), and $K=5$'s orange component (mean $-0.1$ kW, 1.3\% weight) -- roughly an order of magnitude below the true rate in every case, though genuinely present near zero, unlike at 9 m/s.
+Only at 13 m/s, where curtailment has dropped to 1.5\% of points, does the near-absence of a near-zero component look reasonable rather than wrong.
+
+What the MDN instead represents with substantial, well-balanced weight is a second \emph{on-curve} mode, not a curtailed one.
+At $K=4$ and 9 m/s, 59\% of the weight sits on the red component (mean near 1818 kW) and 41\% on the green component (mean near 1917 kW) -- both close to the main trend line, not one curtailed and one on-curve.
+Because these two means are only 99 kW apart relative to an axis spanning several thousand kW, the two lines sit almost on top of each other in Figure~\ref{fig:wind-curve-overlay-speed-direction} at this point -- visually subtle, but confirmed as substantial by the weight panel alongside it.
+That weight panel also shows this is not an isolated point: across most of the swept range a different color is dominant in turn (orange below roughly 3.5 m/s, red through the early-to-mid ramp, green through the rest of the ramp, blue above roughly 13 m/s).
+$K=4$ carries the highest average secondary weight of any $K$ across the full speed sweep (0.138), and $K=3$ independently recovers a similarly on-trend split near rated wind speed: at 13 m/s, $K=3$ splits 80/20 between the blue component (3526 kW) and the orange component (3396 kW).
+
+We read this as a genuine, if unexpected, finding rather than a failure to reproduce the exploratory analysis: whatever secondary structure the MDN finds useful enough to spend real weight on is not the curtailment split we hypothesized going in, but a smaller, on-trend split whose physical cause we have not identified.
+The curtailment mode is real -- we verified it directly in the raw data, independent of any trained model -- but the MDN does not represent it with weight proportional to its actual frequency outside the regime near rated power, where curtailment itself becomes rare.
+
+Wind direction and day-of-year present a substantially weaker case (Figure~\ref{fig:wind-curve-overlay-doy}).
+In the wind-direction sweep (left), how the diverging component behaves depends on $K$: at $K=4$ and $K=5$, the diverging component (blue and red respectively) dips sharply within a narrow slice of the domain, roughly $75$-$100^\circ$, and recovers toward the main curve elsewhere, while at $K=2$ and $K=3$ the diverging component (blue and green respectively) instead stays low across nearly the entire domain rather than in one narrow slice.
+Neither behavior tracks a real competing mode across most of the feature's range the way wind speed's components do.
+The day-of-year sweep (right) shows the dominant component (orange at $K=2,3$) elevated near both the start and end of the calendar year (roughly days 0-50 and 300-365), with a lower, flatter plateau in between, rather than splitting into two persistently co-present modes; as noted earlier, this pattern is confounded with a single year's weather and cannot be taken as evidence of a genuine repeating seasonal effect.
+Both features' apparent secondary weight is also far less stable across $K$ than wind speed's: wind direction's average secondary weight jumps from 0.04-0.07 at $K=2,3$ to 0.27 at $K=4$ before dropping back to 0.17 at $K=5$, and day-of-year shows the same $K=4$-concentrated pattern (0.06-0.08 at $K=2,3$ versus 0.21 at $K=4$).
+A pattern that only appears at one specific $K$ is weaker evidence than one that persists across several, since it is consistent with a particular optimization run happening to find a use for extra capacity rather than the model consistently rediscovering real structure regardless of how many components it is given -- and this comparison rests on a single training seed, so we cannot rule out that the $K=4$ concentration is itself an artifact of this particular run rather than a reproducible property of the data.
+Taken together, direction and day-of-year contribute real but inconsistent signal that we would not treat as evidence of genuine multimodal structure with the same confidence as wind speed's on-trend split -- and, as with wind speed, we have not confirmed that either feature's signal corresponds to the curtailment-like pattern originally hypothesized in the EDA rather than some other structure.
+
+% ============================================================
+% 2. Density grid - short explanation
+%    (goes after \reportfigure{density_grid_wind_turbine.png}, line 309)
+% ============================================================
+
+Figure~\ref{fig:density-grid-wind} shows the full predicted density $p(\text{ActivePower} \mid \mathbf{x})$ at three representative wind-speed values (5, 9, and 13 m/s, spanning the ramp region and rated output) across all five values of $K$, complementing the curve-overlay sweep by showing the actual shape of the predicted distribution at fixed points rather than only its swept mean and weight.
+This view makes the mismatch described above directly visible: none of the density panels show meaningful mass near 0 kW at 5 or 9 m/s, despite 19.6\% and 6.7\% of the real data sitting below 200 kW at those speeds respectively -- the predicted densities are concentrated almost entirely around the on-curve value, with at most a thin, low-height tail toward zero.
+The splits that \emph{are} visible as genuinely separated probability mass are the on-trend splits discussed above, not a curtailed-vs-on-curve split: at $K=4$ and 9 m/s, two distinct peaks near 1818 kW and 1917 kW, and at $K=3$ and 13 m/s, near 3396 kW and 3526 kW.
+In both cases the peaks visibly overlap given each component's spread, meaning even this genuine structure is not always sharply distinguishable point-to-point -- a point relevant to the model's predictive sharpness and calibration, separate from the question of whether it represents curtailment at all.
+
+The grid also reinforces the point made above by direct visual contrast.
+$K=1$ always shows a single gaussian by construction, but $K=2$ collapses to an effectively single dominant mode at all three wind speeds (98\%+ weight on one component at 5 and 9 m/s, and 99.99\% at 13 m/s) despite having a second component available, and even $K=3$ through $K=5$ spend most of their extra components on the on-trend split rather than on the curtailment mode the raw data actually contains.
+Simply allowing more components does not guarantee the model uses them for the structure we expected -- it may use them for something else entirely, as is the case here.
+
+% ============================================================
+% 3. Conclusion
+%    (replaces the answerbox placeholder, lines 338-340)
+%    Simplified per request: focus on regression-vs-MDN performance and
+%    how the MDN did on the synthetic task vs. the wind-turbine task.
+%    Numbers pulled from the current main.tex (lines 177, 255, 261).
+% ============================================================
+
+On the synthetic task, the MDN beats the deterministic regression model outright: every MDN, including $K=1$, achieves better test RMSE than RegressionNet, and $K=2$ gives the best result on both metrics (test RMSE 0.9036, test NLL $-0.2221$), matching the true two-mode generative process.
+Here, representing the two modes explicitly helped point accuracy as well as distributional fit -- there was no trade-off to make.
+
+On the wind-turbine task, the two model families split the comparison instead of one simply winning.
+RegressionNet achieves the best test RMSE overall (195.93 kW), beating every MDN including the best of them ($K=5$, 223.37 kW), while the MDNs still achieve better test NLL than the single-Gaussian model as $K$ increases.
+This is not a contradiction: RegressionNet is trained to directly minimize MSE and so converges toward the conditional mean, the MSE-optimal point predictor, while an MDN's point estimate is only a byproduct of maximizing likelihood.
+Where the MDN represents two components as genuinely separated, the mixture mean falls between them in a region of low density, giving a worse point estimate even though the underlying distribution is better represented.
+
+So the MDN's advantage over regression is consistently a distributional one (NLL), not a point-accuracy one (RMSE) -- but whether that costs anything on RMSE depends on the task.
+On the synthetic data, the two modes were separated enough that fitting them explicitly improved point accuracy too.
+On the wind-turbine data, real separation between components exists but comes at a measurable RMSE cost, so RegressionNet remains the better choice if a single point prediction is all that is needed, while the MDN is the better choice if the goal is representing the actual spread of likely outcomes.
