@@ -35,6 +35,11 @@ Produces:
     +/- std curves, swept over one conceptual feature at a time (other
     features held at representative values), overlaid on the raw scatter
     restricted to a matching band of a companion feature. One row per K.
+  - report/figs/weight_overlay_speed_wind_turbine.png: each MDN's
+    per-component mixture weight vs wind speed, one row per K, using the
+    same component-index-to-color mapping as curve_overlay_speed - meant
+    to be read side by side with that figure so a colored line's weight
+    can be looked up directly rather than inferred.
   - report/figs/feature_separation_wind_turbine.png: bar chart of the
     maximum gap between MDN component means achieved while sweeping each
     of the 4 conceptual features, taken as the max over K - a single
@@ -447,6 +452,51 @@ def plot_curve_overlay(models_by_k, reg_model, x_scatter_raw, y_scatter_raw,
     plt.close(fig)
 
 
+def plot_weight_overlay(models_by_k, x_mean, x_std, spec, n_grid=200):
+    """Mixture weight alpha_k vs the swept feature, one row per K, using
+    the same component colors (raw index -> color) as plot_curve_overlay's
+    mean/std curves. Meant to be read side by side with that figure: a
+    color's weight here tells you how much that same-colored line there
+    actually matters at any given point, without needing a sweep-wide
+    average per component - which breaks down under label-switching,
+    since a raw component's role (dominant vs. near-dead) can flip
+    across the sweep (e.g. checked for wind speed K=4: the red component
+    goes from 81.5% weight at 5 m/s to 59.0% at 9 m/s to 3.6% at 13 m/s -
+    no single number summarizes that)."""
+    k_values = sorted(models_by_k)
+    sweep_grid, x_grid = build_sweep_grid(spec, n_grid, x_mean, x_std)
+
+    colors = plt.cm.tab10.colors
+    # Same (8, 3.5 * len(k_values)) figsize as plot_curve_overlay: this plot
+    # is meant to sit side by side with curve_overlay_speed_wind_turbine.png
+    # in the report (same width, no height cap in the report macro), so
+    # matching figsize keeps the K rows aligned and equally sized between
+    # the two figures rather than one rendering shorter/more cramped.
+    fig, axes = plt.subplots(len(k_values), 1, figsize=(8, 3.5 * len(k_values)), squeeze=False)
+    axes = [ax[0] for ax in axes]
+
+    for row, K in enumerate(k_values):
+        ax = axes[row]
+        with torch.no_grad():
+            alpha, _, _ = models_by_k[K](x_grid)          # (n_grid, K)
+        for k in range(K):
+            color = colors[k % len(colors)]
+            ax.plot(sweep_grid.numpy(), alpha[:, k].numpy(), color=color, linewidth=1.5,
+                    label=f"component {k}" if row == 0 else None)
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_ylabel("weight")
+        ax.set_title(f"K={K}", fontsize=10)
+    axes[-1].set_xlabel(spec["label"])
+    axes[0].legend(fontsize=7, loc="upper left")
+
+    output_name = spec["output_name"].replace("curve_overlay_", "weight_overlay_")
+    fig.suptitle(f"MDN component weights vs {spec['label']}")
+    fig.tight_layout()
+    fig.savefig(FIG_DIR / output_name, dpi=150)
+    plt.close(fig)
+    return output_name
+
+
 def plot_feature_separation(models_by_k, x_mean, x_std, y_mean, y_std, n_grid=200):
     """For each conceptual feature, sweep it (other features held at their
     representative values) and compute the max gap between the most
@@ -682,6 +732,9 @@ def main():
         plot_curve_overlay(models_by_k, reg_model, x_train_raw, y_train_raw,
                             x_mean, x_std, y_mean, y_std, spec)
         print(f"Plot saved to {FIG_DIR / spec['output_name']}")
+
+    weight_overlay_name = plot_weight_overlay(models_by_k, x_mean, x_std, SWEEP_SPECS["speed"])
+    print(f"Plot saved to {FIG_DIR / weight_overlay_name}")
 
     sweep_weights_path = save_sweep_component_weights(models_by_k, x_mean, x_std, y_mean, y_std)
     print(f"Weights saved to {sweep_weights_path}")

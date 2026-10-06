@@ -174,9 +174,9 @@ Figure \ref{fig:density-grid-2d} does indeed show this behavior. The MDN adequat
 Additionally, we tried a range of values for $K$, see Figure~\ref{fig:synthetic-comparison}, and found that there was no significant improvement for any $K$ greater than 2. This is expected because the data comes from a simple two-modal distribution.
 
   
-We also compare these $K$ models to a deterministic regressor. This regressor performed similarly to the $K=1$ MDN. NLL and RMSE are reported for all the aforementioned models in Table~\ref{tab:synthetic-results}, when relevant. The best test RMSE and NLL are achieved by $K=2$ at .90364 and -0.2221, respectively. 
+We also compare these $K$ models to a deterministic regressor. This regressor performed similarly to the $K=1$ MDN. NLL and RMSE are reported for all the aforementioned models in Table~\ref{tab:synthetic-results}, when relevant. The best test RMSE is achieved by $K=2$ at 0.9040, while the best test NLL is achieved by $K=4$ at $-0.2536$.
 
-We observe that training loss (NLL or MSE) over epochs decreases for all models, and that MDN models with $K>1$ outperform the deterministic and single-Gaussian models. Models with $K \in {2,3,4,5}$ perform similarly, but the best performance is achieved with $K=2$.
+We observe that training loss (NLL or MSE) over epochs decreases for all models, and that MDN models with $K>1$ outperform the deterministic and single-Gaussian models. Models with $K \in {2,3,4,5}$ perform similarly, with $K=2$ best on RMSE and $K=4$ best on NLL.
 
 
 
@@ -197,9 +197,7 @@ numbers of components.}
 
 \begin{table}[tb]
   \centering
-  \caption{Synthetic-data performance loaded directly from
-  \texttt{csvs/synthetic\_summary.csv}. NLL is not defined for the
-  deterministic model.}
+  \caption{Synthetic-data performance. NLL is not defined for the deterministic model.}
   \label{tab:synthetic-results}
   \input{csvs/synthetic_summary_table.tex}
 \end{table}
@@ -277,7 +275,7 @@ The MDNs with $K\geq2$ sit in between these models, fitting more closely than th
 for the realistic-data models, including the selected checkpoint or stopping
 point.}{fig:wind-training}
 
-Each curve overlay plot, Figures~\ref{fig:wind-curve-overlay-speed-direction} and \ref{fig:wind-curve-overlay-hour-doy}, is produced by a fix-sweep approach: a sequence of point queries in which the feature under inspection is varied across a grad of 200 values spanning its domain, while every other input feature is held fixed at a single representative value (wind speed = 9 m/s, wind direction = $50^\circ$, hour-of-day = 12:00, day-of-year = 182) rather than allowed to vary.
+Each curve overlay plot, Figures~\ref{fig:wind-curve-overlay-speed-direction} and \ref{fig:wind-curve-overlay-doy}, is produced by a fix-sweep approach: a sequence of point queries in which the feature under inspection is varied across a grid of 200 values spanning its domain, while every other input feature is held fixed at a single representative value (wind speed = 9 m/s, wind direction = $50^\circ$, hour-of-day = 12:00, day-of-year = 182) rather than allowed to vary.
 At each of the 200 points we query the trained MDN and regression models.
 The resulting means, $\pm1$ std bands, and regression predictions are plotted as a function of the swept feature.
 The dashed line is the regression prediction and the colored bands are the $\pm1$ std bands for each $K$ in the given MDN model.
@@ -286,37 +284,64 @@ Note that each curve overlay plot only reports a single fixed value, for example
 These values denote the point and tolerance values used to restrict the raw training points that are plotted alongside the model curves, thus each plot only contains a small representative sample of the raw data.
 Every other feature not named in the figure title is left unfiltered, thus the raw data scatter is not conditioned the same across each curve overlay plot.
 
-The plots let us check feature by feature, whether the MDN's components are modeling real modes or fitting frivolous guassians that overall to not contribute strongly to the mixture.
+The plots let us check feature by feature, whether the MDN's components are modeling real modes or fitting frivolous gaussians that overall do not contribute strongly to the mixture.
 Each component $k$ carries a mixture weight $\pi_k(\mathbf{x}) \in [0,1]$, with $\sum_k \pi_k(\mathbf{x}) = 1$: this is the fraction of predicted probability assigned to that component at input $\mathbf{x}$.
-A components mean can move substantially across a sweep while its weight stays near zero, in which case the gaussian does not contribute strongly to the model's overall predictive power.
+A component's mean can move substantially across a sweep while its weight stays near zero, in which case the gaussian does not contribute strongly to the model's overall predictive power.
 So, we read weight and mean together rather than judging multimodality from the banded curves alone.
 
-\reportfigurepairtall{curve_overlay_speed_wind_turbine.png}{curve_overlay_direction_wind_turbine.png}
-  {RegressionNet's predicted curve vs. each MDN's predicted component means
-  (colored, $\pm1$ std shaded) swept over wind speed (left) and wind
-  direction (right), one row per $K$, overlaid on real data restricted to a
-  representative band of one other feature.}
+Wind speed provides the clearest evidence that the MDN discovers different modes, but they are not the modes we hypothesized in the exploratory analysis.
+Figure~\ref{fig:wind-conditional-histograms} motivated wind speed as multimodal because a fixed-speed slice showed evidence of separate clusters, in particular at wind speed straddling 5 and 9 m/s.
+Checking the same points against the trained models and weights, we do see multiple gaussians with a significant amount of contribution to the overall mixture around these points, however, the dominant components regardless of $K$ seem to fit the main trend line and not the curtailment around 0 nor the two branches near the plateau.
+For the MDN with $K=4$ we do see the mean of the orange component roughly fitting the theoretical mode identified in the exploratory analysis, however, at 9 m/s the mean is $-16.5$ with an overall weight of 0.13\% in the mixture.
+We see a similar weighting to all points in this theoretical mode where $K>2$.
+
+What the MDNs seem to be fitting, especially for $K=4$, is an \emph{on-curve} mode that is not obvious through simple visualization.
+At $K=4$ and 9 m/s, 59\% of the weight sits on the red component and 41\% on the green component, both close to the main trend line.
+$K=4$ carries the highest average secondary weight of any $K$ across the full speed sweep, and $K=3/5$ recover a similar on-tend split near the max-power plateau.
+We read this as a genuine, but unexpected, finding; it seems the previously identified modes did not carry enough weight to significantly impact the training of the mixture.
+Instead, the primary signal is the concentrated trend line that the regression model also fits.
+
+The other features appeared to show a weaker case of multimodality as well as being strong signals the networks used for learning.
+Figure~\ref{fig:wind-curve-overlay-doy} displays similar fix-sweep plots for the wind direction and day of year features.
+Unlike the sweep plots for wind speed both wind direction and day of year MDN components appear to be unstable.
+In the case of wind speed, components appear to fit similar trends regardless of $K$, whereas there appears to be more variability across $K$ for wind direction and day of year.
+These features do seem to have a somewhat stable primary component (orange in $k=2-3$ for both features), however, the secondary components vary wildly.
+Wind direction's average secondary weight jumps from 0.04-0.07 at $K=2,3$ to 0.27 at $K=4$ before dropping back to 0.17 at $K=5$, and day-of-year shows the same $K=4$-concentrated pattern (0.06-0.08 at $K=2,3$ versus 0.21 at $K=4$).
+Taken together, direction and day of year do seem to have a true contribution to training signal, however, there is weak evidence these features contribute to a multimodal relationship with Active Power.
+
+\reportfigurepairtall{curve_overlay_speed_wind_turbine.png}{weight_overlay_speed_wind_turbine.png}
+  {The regression network's predicted curve vs. each MDN's predicted component means
+  (colored, $\pm1$ std shaded) swept over wind speed (left) with one row per $K$, overlaid on raw data.
+  Each MDN's predicted component's respective weight values across the sweep (right) shows the weight each component provides across wind speed.}
   {fig:wind-curve-overlay-speed-direction}
 
-\reportfigurepairtall{curve_overlay_hour_wind_turbine.png}{curve_overlay_doy_wind_turbine.png}
-{Same style, swept over hour-of-day (left) and day-of-year (right).}
-{fig:wind-curve-overlay-hour-doy}
+\reportfigurepairtall{curve_overlay_direction_wind_turbine.png}{curve_overlay_doy_wind_turbine.png}
+{MDN component sweep over wind direction (left) and day-of-year (right).}
+{fig:wind-curve-overlay-doy}
+
+Figure~\ref{fig:density-grid-wind} shows the full predicted density $p(\text{ActivePower} \mid \mathbf{x})$ at three representative wind-speed values (5, 9, and 13 m/s) across all five values of $K$, complementing the curve-overlay sweep by showing the actual shape of the predicted distribution at fixed points rather than only its swept mean and weight.
+This view further supports the density is largely contained on the wind speed curve and the theoretical mode does not contribute significant weight to the overall mixture.
+The strongest evidence for multimodality is $K=4$ at a wind speed of 9 m/s, where the mixture splits nearly evenly (59\%/41\%) between two components about 99 kW apart.
+Other points, such as $K=4$ at 5 m/s (81.5\%/15.6\%, only 39 kW apart), show a similar but less balanced split, and even at 9 m/s the two components substantially overlap given their spread - the mixture is largely composed of gaussians with high overlap rather than sharply separated modes.
+
 
 \reportfigure{density_grid_wind_turbine.png}{Learned conditional density for the
 wind-turbine task over a grid of inputs and active-power outputs. Use this view
 to show heteroscedasticity, multiple operating regimes, and regions where the
 model assigns diffuse or multimodal probability.}{fig:density-grid-wind}
 
+
 \section{Conclusion}
 
-\answerbox{Summarize when the MDN improves on deterministic and single-Gaussian
-regression, identify the best-supported mixture count, state limitations, and
-give one concrete next experiment.}{4\baselineskip}
+  On the synthetic task, the MDN beats the regression model outright.
+  Every MDN, including $K=1$, achieves better test RMSE than the deterministic regression network, with $K=2$ best on RMSE and $K=4$ best on NLL.
+  Here representing the two modes directly contributed to overall improved performance.
 
-% Uncomment this section if references are used.
-% \begin{thebibliography}{9}
-% \bibitem{bishop1994mdn}
-% C. M. Bishop, ``Mixture Density Networks,'' 1994.
-% \end{thebibliography}
+  On the wind-turbine task, the regression network achieves the best test RMSE overall (195.93 kW), beating every MDN including the best of them ($K=5$, 223.37 kW), while the MDNs still achieve better test NLL than the single-Gaussian model as $K$ increases.
+  Where the MDN represents two components as genuinely separated, the mixture mean falls between them in a region of low density, giving a worse point estimate even though the underlying distribution is better represented than the regression model.
+  So, the MDN's advantage over regression is consistently distributional (NLL), not a point-accuracy (RMSE).
+  For an MDN to beat a deterministic model on point prediction, the underlying data needs more cleanly separated modes than the wind-turbine data provided here.
+
+
 
 \end{document}
