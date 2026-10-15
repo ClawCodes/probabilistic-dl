@@ -1,0 +1,14 @@
+{
+  "test_accuracy": 0.9950000047683716,
+  "config": {
+    "dataset": "two_moons",
+    "method": "ensemble",
+    "seed": 7,
+    "epochs": 200,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "hidden_dim": 64,
+    "members": 5
+  }
+}

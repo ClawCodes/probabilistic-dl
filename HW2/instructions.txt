@@ -1,0 +1,22 @@
+In this assignment you will implement and analyze ensembles.
+You are expected to write a report of approximately four pages analyzing your results, this should include relevant figures.
+
+You are need to implement what we'll call "standard deep ensembles" that is ensembles that are created simply by training from different initializations and different random seeds. Make sure to use L2 regularization / Gaussian priors for your loss function. You also need to implement and compare this to (at least) one of the other ensembles techniques we discussed:
+- Approximately Bayesian ensembling
+- MC dropout
+- Concrete dropout
+- Fast geometric ensembling (FGE)
+- Stochastic weight averaging (SWA)
+- SWA-Gaussain (SWAG)
+- MultiSWAG
+
+Your analysis should examine at least the following topics, but you should discuss anything you find interesting and explore other comparisons:
+- Analyze the implementation first on a 2D example (likely synthetic) task where you can easily validate what's going on
+- Compare accuracy / error and uncertainty predictions for varying numbers of ensembles
+- Compare accuracy / error and uncertainty predictions between different ensemble variants
+-Analyze both training and test performance of the models
+-Pick a higher dimensional realistic data set for analysis of your model.
+
+You can work with a partner and use the Canvas group function to submit together.
+
+You should submit your final report as a PDF.
