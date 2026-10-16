@@ -5,8 +5,8 @@ from .data import DatasetBundle
 from .methods.base import Prediction
 
 
-def plot_2d_surface(dataset: DatasetBundle, predictor, fig_dir: Path, method: str) -> Path:
-    fig_dir.mkdir(parents=True, exist_ok=True)
+def plot_2d_surface(dataset: DatasetBundle, predictor, path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
     x_min, x_max = dataset.x_train[:, 0].min().item() - .7, dataset.x_train[:, 0].max().item() + .7
     y_min, y_max = dataset.x_train[:, 1].min().item() - .7, dataset.x_train[:, 1].max().item() + .7
     xx, yy = torch.meshgrid(torch.linspace(x_min, x_max, 250), torch.linspace(y_min, y_max, 250), indexing="xy")
@@ -20,15 +20,14 @@ def plot_2d_surface(dataset: DatasetBundle, predictor, fig_dir: Path, method: st
     axes[1].scatter(dataset.x_train[:, 0], dataset.x_train[:, 1], c=dataset.y_train, cmap="RdBu", edgecolor="white", s=18)
     axes[1].set(title="Epistemic uncertainty (MI)", xlabel="$x_1$", ylabel="$x_2$")
     fig.colorbar(image, ax=axes[1], label="nats")
-    path = fig_dir / f"{method}_{dataset.feature_shape[0]}d_surface.png"
     fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path
 
 
-def plot_ensemble_size_sweep(rows: list[dict[str, float]], fig_dir: Path, dataset_name: str) -> Path:
+def plot_ensemble_size_sweep(rows: list[dict[str, float]], path: Path) -> Path:
     """Plot the required ensemble-size accuracy/uncertainty comparison."""
-    fig_dir.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     sizes = [row["members"] for row in rows]
     fig, axes = plt.subplots(1, 2, figsize=(9, 3.6), constrained_layout=True)
     axes[0].plot(sizes, [row["train_accuracy"] for row in rows], "o-", label="train")
@@ -39,7 +38,6 @@ def plot_ensemble_size_sweep(rows: list[dict[str, float]], fig_dir: Path, datase
     axes[1].plot(sizes, [row["test_mutual_information"] for row in rows], "o-", label="mutual information")
     axes[1].set(xlabel="number of members", ylabel="nats", title="Test uncertainty vs. ensemble size")
     axes[1].legend()
-    path = fig_dir / f"ensemble_size_sweep_{dataset_name}.png"
     fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path

@@ -1,0 +1,6 @@
+{
+  "train_accuracy": 0.8320000171661377,
+  "test_accuracy": 0.8209999799728394,
+  "test_predictive_entropy": 0.606701672077179,
+  "test_mutual_information": 0.006136576645076275
+}

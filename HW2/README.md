@@ -1,40 +1,58 @@
 # HW2: Predictive uncertainty
 
 This project compares uncertainty estimates from a standard deep ensemble and
-(later) MC dropout. It starts with a deliberately simple 2-D classification
-problem and is structured so the same experiment code works for high-dimensional
-real data.
+(later) MC dropout, on a 2-D toy problem (two moons) and Fashion-MNIST.
 
 ## Quick start
 
-From `HW2`, install the dependencies with your preferred environment manager,
-then run:
+From `HW2`:
 
-```powershell
-python -m src.run --dataset two_moons --method ensemble --epochs 200 --members 5
+```bash
+python -m src.pipeline                                   # new run, default config
+python -m src.pipeline --set two_moons.epochs=50 --ensemble-sizes 1 2 5
+python -m src.pipeline --dir run_1                       # retrain run_1 from its config.json
+python -m src.pipeline --dir run_1 --step plot           # replot run_1 from saved weights
 ```
 
-All generated plots are written directly to `latex/figs/`; scalar results and
-per-member histories go to `outputs/`. Compile the write-up from `latex/`.
+Pipeline steps are `train -> plot`; `--step` picks where to start. Every run trains
+every configured method on every configured dataset.
 
-## Adding a real/high-dimensional dataset
+- Without `--dir`, a new `outputs/run_N/` is created and the config (defaults,
+  then `--config file.json`, `--seed`, `--methods`, `--ensemble-sizes`, then
+  `--set DATASET.FIELD=VALUE` overrides) is written to `run_N/config.json`.
+- With `--dir`, the run's `config.json` is the only source of truth; config
+  flags are rejected so artifacts never drift from their config.
+- `train` rewrites a method's training and plot artifacts; `plot` rewrites only
+  plot artifacts, loading weights from disk.
 
-Implement a loader returning `DatasetBundle` in `src/data.py`, register it in
-`load_dataset`, and expose any needed command-line options in `src/run.py`.
-The bundle contains train/test tensors, class labels, and a `feature_shape`;
-models flatten all non-batch feature dimensions, so tabular data, images, or
-embeddings work without changing the ensemble code.
+Ensemble members are seeded `seed + k`, so member `k` is identical for any
+ensemble size. A run trains `max(ensemble_sizes)` members once, and the size
+sweep evaluates prefixes of that ensemble.
 
-## Methods
+## Run layout
 
-- `ensemble` is fully implemented: independently initialized MLPs trained with
-  different random seeds on the same data, L2/Gaussian-prior regularization,
-  averaged predictive probabilities, and standard entropy / mutual-information
-  uncertainty summaries.
-- `mc_dropout` is intentionally a clear extension point. Its CLI path explains
-  what is missing rather than silently running the wrong experiment. Implement
-  `MCDropoutPredictor.fit` and `predict_proba` in `src/methods/mc_dropout.py`;
-  it already shares the `PredictiveModel` interface used by the runner.
+```
+outputs/run_N/
+  config.json
+  <dataset>/<method>/
+    weights/member_XX.pt   # train
+    history.csv            # train: loss/accuracy per member per epoch
+    members.csv            # train: final per-member loss/accuracy
+    metrics.json           # train: full-model train/test accuracy and uncertainty
+    size_sweep.csv         # plot
+    figures/               # plot: size_sweep.png, surface.png (2-D datasets only)
+```
 
-Use a fixed seed when comparing methods, and tune both methods using validation
-data only once a validation split is added for the selected real dataset.
+Figures that compare methods on one dataset belong at the `<dataset>/` level.
+
+## Adding a dataset or method
+
+- Dataset: return a `DatasetBundle` from `load_dataset` in `src/data.py` and add
+  the name and default hyperparameters in `src/config.py`.
+- Method: implement `PredictiveModel` (`fit`, `predict(x, n_samples)`, `save`,
+  `load`) and register it in `build_method` in `src/methods/__init__.py`.
+  `mc_dropout` is scaffolded in `src/methods/mc_dropout.py`; build its
+  `Prediction` with `prediction_from_samples`.
+
+`src/old/` holds the previous `run.py`/`sweep.py` for reference only; they no
+longer run against the current modules.

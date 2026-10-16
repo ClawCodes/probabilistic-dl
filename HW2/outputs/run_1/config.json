@@ -1,0 +1,26 @@
+{
+  "seed": 7,
+  "methods": [
+    "ensemble"
+  ],
+  "ensemble_sizes": [
+    1,
+    2
+  ],
+  "datasets": {
+    "two_moons": {
+      "epochs": 5,
+      "batch_size": 128,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "hidden_dim": 64
+    },
+    "fashion_mnist": {
+      "epochs": 1,
+      "batch_size": 256,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "hidden_dim": 256
+    }
+  }
+}
