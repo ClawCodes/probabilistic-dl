@@ -2,3 +2,5 @@
 .idea/
 .python-version
 uv.lock
+HW2/data/
+__pycache__
