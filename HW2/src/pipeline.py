@@ -9,6 +9,8 @@ Steps run in order train -> plot; `--step` picks where to start.
 """
 import argparse
 import csv
+import itertools
+import math
 import json
 import random
 import shutil
@@ -17,15 +19,17 @@ import numpy as np
 import torch
 from .config import ExperimentConfig, next_run_dir, resolve_run_dir
 from .data import DatasetBundle, load_dataset
-from .methods import PredictiveModel, build_method
-from .plotting import plot_2d_surface, plot_ensemble_size_sweep
+from .methods import PredictiveModel, build_method, prediction_from_samples
+from .metrics import accuracy, ece, error_rate, nll, reliability_bins
+from .plotting import ENSEMBLE_COLOR, MEMBER_COLOR, SWEEP_PANELS, plot_2d_surface, plot_ensemble_size_sweep, plot_reliability, plot_training_curves
 
 STEPS = ("train", "plot")
 CONFIG_FLAGS = ("config", "seed", "methods", "ensemble_sizes", "set")
 
 # Files each step owns inside run_N/<dataset>/<method>/; a step wipes only its own.
-TRAIN_ARTIFACTS = ("weights", "history.csv", "members.csv", "metrics.json")
-PLOT_ARTIFACTS = ("size_sweep.csv", "figures")
+TRAIN_ARTIFACTS = ("weights", "history.csv", "metrics.json")
+PLOT_ARTIFACTS = ("size_sweep.csv", "size_sweep_summary.csv", "figures")
+STRING_COLUMNS = ("member", "split")
 
 Models = dict[tuple[str, str], PredictiveModel]
 
@@ -77,13 +81,17 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         writer = csv.DictWriter(handle, fieldnames=rows[0].keys()); writer.writeheader(); writer.writerows(rows)
 
 
-def read_csv(path: Path) -> list[dict[str, float]]:
+def read_csv(path: Path) -> list[dict]:
     with path.open(newline="") as handle:
-        return [{key: float(value) for key, value in row.items()} for row in csv.DictReader(handle)]
+        return [{key: value if key in STRING_COLUMNS else float(value) for key, value in row.items()} for row in csv.DictReader(handle)]
 
 
-def accuracy(probabilities: torch.Tensor, y: torch.Tensor) -> float:
-    return (probabilities.argmax(1) == y).float().mean().item()
+def sample_metrics(samples: torch.Tensor, y: torch.Tensor, ece_bins: int) -> dict[str, float]:
+    """Error, NLL, ECE and mean uncertainty of the averaged prediction over `samples` (S, N, C)."""
+    prediction = prediction_from_samples(samples)
+    probs = prediction.probabilities
+    return {"accuracy": accuracy(probs, y), "error": error_rate(probs, y), "nll": nll(probs, y), "ece": ece(probs, y, ece_bins),
+            "entropy": prediction.predictive_entropy.mean().item(), "mi": prediction.mutual_information.mean().item()}
 
 
 def seed_everything(seed: int) -> None:
@@ -101,29 +109,45 @@ def train(run_dir: Path, cfg: ExperimentConfig, datasets: dict[str, DatasetBundl
             clear(out, TRAIN_ARTIFACTS + PLOT_ARTIFACTS)  # plot artifacts would be stale
             print(f"[train] {dataset_name}/{method}")
             model = build_method(method, data, ds_cfg, cfg)
-            history, members = model.fit(data.x_train, data.y_train)
+            history = model.fit(data.x_train, data.y_train, data.x_test, data.y_test)
             model.save(out / "weights")
             write_csv(out / "history.csv", history)
-            write_csv(out / "members.csv", members)
-            train_pred, test_pred = model.predict(data.x_train), model.predict(data.x_test)
-            metrics = {
-                "train_accuracy": accuracy(train_pred.probabilities, data.y_train),
-                "test_accuracy": accuracy(test_pred.probabilities, data.y_test),
-                "test_predictive_entropy": test_pred.predictive_entropy.mean().item(),
-                "test_mutual_information": test_pred.mutual_information.mean().item(),
-            }
+            metrics = {}
+            for split, (x, y) in (("train", (data.x_train, data.y_train)), ("test", (data.x_test, data.y_test))):
+                for name, value in sample_metrics(model.sample_probabilities(x), y, cfg.ece_bins).items():
+                    metrics[f"{split}_{name}"] = value
             (out / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
             print(f"[train] {dataset_name}/{method}: test accuracy {metrics['test_accuracy']:.3f}")
             models[dataset_name, method] = model
     return models
 
 
-def size_sweep(model: PredictiveModel, data: DatasetBundle, sizes: tuple[int, ...], members: list[dict[str, float]]) -> list[dict[str, float]]:
-    rows = []
-    for size in sorted(sizes):
-        train_pred, test_pred = model.predict(data.x_train, n_samples=size), model.predict(data.x_test, n_samples=size)
-        rows.append({"members": size, "train_accuracy": accuracy(train_pred.probabilities, data.y_train), "test_accuracy": accuracy(test_pred.probabilities, data.y_test), "test_predictive_entropy": test_pred.predictive_entropy.mean().item(), "test_mutual_information": test_pred.mutual_information.mean().item(), "mean_member_train_accuracy": sum(row["train_accuracy"] for row in members[:size]) / size})
-    return rows
+def member_subsets(n_members: int, size: int, draws: int, generator: torch.Generator) -> list[tuple[int, ...]]:
+    """k-member subsets for error bars: every member at k=1, every combination when
+    there are at most `draws` of them (so k=M is one draw), else `draws` random ones."""
+    if size == 1:
+        return [(member,) for member in range(n_members)]
+    if math.comb(n_members, size) <= draws:
+        return list(itertools.combinations(range(n_members), size))
+    return [tuple(sorted(torch.randperm(n_members, generator=generator)[:size].tolist())) for _ in range(draws)]
+
+
+def size_sweep(samples: dict[str, tuple[torch.Tensor, torch.Tensor]], cfg: ExperimentConfig) -> tuple[list[dict], list[dict]]:
+    """Per-subset rows and their mean/std summary for every ensemble size and split."""
+    generator = torch.Generator().manual_seed(cfg.seed)
+    rows, summary = [], []
+    for size in sorted(cfg.ensemble_sizes):
+        subsets = member_subsets(cfg.members, size, cfg.subset_draws, generator)
+        for split, (split_samples, y) in samples.items():
+            split_rows = [{"members": size, "draw": draw, "split": split, "subset": " ".join(map(str, subset)), **sample_metrics(split_samples[list(subset)], y, cfg.ece_bins)}
+                          for draw, subset in enumerate(subsets)]
+            rows.extend(split_rows)
+            entry = {"members": size, "split": split, "draws": len(subsets)}
+            for metric in [metric for metric, _ in SWEEP_PANELS] + ["accuracy"]:
+                values = torch.tensor([row[metric] for row in split_rows])
+                entry[f"{metric}_mean"], entry[f"{metric}_std"] = values.mean().item(), values.std(unbiased=False).item()
+            summary.append(entry)
+    return rows, summary
 
 
 def plot(run_dir: Path, cfg: ExperimentConfig, datasets: dict[str, DatasetBundle], models: Models | None = None) -> None:
@@ -132,15 +156,33 @@ def plot(run_dir: Path, cfg: ExperimentConfig, datasets: dict[str, DatasetBundle
         data = datasets[dataset_name]
         for method in cfg.methods:
             out = method_dir(run_dir, dataset_name, method)
+            history = read_csv(out / "history.csv")
+            if not history or "split" not in history[0]:
+                raise ValueError(f"{out / 'history.csv'} uses the old schema; retrain with --dir {run_dir.name}.")
             clear(out, PLOT_ARTIFACTS)
             model = models.get((dataset_name, method))
             if model is None:
                 model = build_method(method, data, ds_cfg, cfg)
                 model.load(out / "weights")
-            rows = size_sweep(model, data, cfg.ensemble_sizes, read_csv(out / "members.csv"))
+            # Run the networks once per split; subsets are then just indexing.
+            samples = {"train": (model.sample_probabilities(data.x_train, cfg.members), data.y_train),
+                       "test": (model.sample_probabilities(data.x_test, cfg.members), data.y_test)}
+            rows, summary = size_sweep(samples, cfg)
             write_csv(out / "size_sweep.csv", rows)
-            figures = [plot_ensemble_size_sweep(rows, out / "figures" / "size_sweep.png")]
-            if data.feature_shape == (2,):
+            write_csv(out / "size_sweep_summary.csv", summary)
+            test_samples, y_test = samples["test"]
+            reliability = {
+                "single member": {"probs": test_samples[0], "color": MEMBER_COLOR},
+                f"ensemble (k={cfg.members})": {"probs": test_samples.mean(0), "color": ENSEMBLE_COLOR},
+            }
+            for curve in reliability.values():
+                curve["bins"], curve["ece"] = reliability_bins(curve["probs"], y_test, cfg.ece_bins), ece(curve["probs"], y_test, cfg.ece_bins)
+            figures = [
+                plot_ensemble_size_sweep(summary, out / "figures" / "size_sweep.png"),
+                plot_training_curves(history, out / "figures" / "training_curves.png"),
+                plot_reliability(reliability, out / "figures" / "reliability.png"),
+            ]
+            if data.feature_shape == (2,): #TODO: can make apply to just two moons will also have fashion-MNIST as well
                 figures.append(plot_2d_surface(data, model, out / "figures" / "surface.png"))
             for figure in figures:
                 print(f"[plot] saved {figure.relative_to(run_dir.parent)}")

@@ -3,7 +3,8 @@ from pathlib import Path
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
-from .base import Prediction, PredictiveModel, prediction_from_samples
+from .base import PredictiveModel
+from ..metrics import split_metrics
 from ..models import ClassifierMLP
 
 
@@ -15,9 +16,13 @@ class DeepEnsemble(PredictiveModel):
         self.epochs, self.batch_size, self.learning_rate = epochs, batch_size, learning_rate
         self.weight_decay, self.seed = weight_decay, seed
 
-    def fit(self, x: torch.Tensor, y: torch.Tensor) -> tuple[list[dict[str, float]], list[dict[str, float]]]:
+    def fit(self, x: torch.Tensor, y: torch.Tensor, x_test: torch.Tensor, y_test: torch.Tensor) -> list[dict]:
         self.models = []
-        history, finals = [], []
+        splits = {"train": (x, y), "test": (x_test, y_test)}
+        # Running sum of member probabilities per epoch gives the full ensemble's
+        # learning curve without keeping every member's predictions in memory.
+        prob_sums = {split: torch.zeros(self.epochs, len(sy), self.n_classes) for split, (_, sy) in splits.items()}
+        history = []
         for member in range(self.members):
             # Set this before construction so each member's initialization is
             # explicitly tied to a distinct, reproducible seed. Member k is
@@ -28,40 +33,36 @@ class DeepEnsemble(PredictiveModel):
             self.models.append(model)
             # Standard deep ensembles differ only in random initialization and
             # stochastic training order; every member sees the same data.
-            train_x, train_y = x, y
-            loader = DataLoader(TensorDataset(train_x, train_y), batch_size=self.batch_size, shuffle=True)
+            loader = DataLoader(TensorDataset(x, y), batch_size=self.batch_size, shuffle=True)
             # weight_decay is the L2 penalty, equivalent to an isotropic
             # zero-mean Gaussian prior over weights (up to scaling convention).
             optimizer = torch.optim.Adam(model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
             criterion = nn.CrossEntropyLoss()
             for epoch in range(self.epochs):
                 model.train()
-                total_loss, correct = 0.0, 0
                 for batch_x, batch_y in loader:
                     optimizer.zero_grad()
-                    logits = model(batch_x)
-                    loss = criterion(logits, batch_y)
+                    loss = criterion(model(batch_x), batch_y)
                     loss.backward()
                     optimizer.step()
-                    total_loss += loss.item() * len(batch_y)
-                    correct += (logits.argmax(1) == batch_y).sum().item()
-                history.append({"member": member, "epoch": epoch + 1, "train_loss": total_loss / len(train_y), "train_accuracy": correct / len(train_y)})
-            with torch.no_grad():
-                model.eval()
-                logits = model(train_x)
-                final_loss = criterion(logits, train_y).item()
-                accuracy = (logits.argmax(1) == train_y).float().mean().item()
-            finals.append({"member": member, "train_loss": final_loss, "train_accuracy": accuracy})
-        return history, finals
+                with torch.no_grad():
+                    model.eval()
+                    for split, (sx, sy) in splits.items():
+                        probs = model(sx).softmax(dim=1)
+                        prob_sums[split][epoch] += probs
+                        history.append({"member": member, "epoch": epoch + 1, "split": split, **split_metrics(probs, sy)})
+        for epoch in range(self.epochs):
+            for split, (_, sy) in splits.items():
+                history.append({"member": "ensemble", "epoch": epoch + 1, "split": split, **split_metrics(prob_sums[split][epoch] / self.members, sy)})
+        return history
 
-    def predict(self, x: torch.Tensor, n_samples: int | None = None) -> Prediction:
-        models = self.models[:n_samples]
+    def sample_probabilities(self, x: torch.Tensor, n_samples: int | None = None) -> torch.Tensor:
         with torch.no_grad():
             probabilities = []
-            for model in models:
+            for model in self.models[:n_samples]:
                 model.eval()
                 probabilities.append(model(x).softmax(dim=1))
-            return prediction_from_samples(torch.stack(probabilities))
+            return torch.stack(probabilities)
 
     def save(self, directory: Path) -> None:
         directory.mkdir(parents=True, exist_ok=True)

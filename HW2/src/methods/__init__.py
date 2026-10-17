@@ -10,7 +10,7 @@ def build_method(name: str, data: DatasetBundle, ds_cfg: DatasetConfig, cfg: Exp
         return DeepEnsemble(data.feature_shape, data.n_classes, members=cfg.members, hidden_dim=ds_cfg.hidden_dim, epochs=ds_cfg.epochs, batch_size=ds_cfg.batch_size, learning_rate=ds_cfg.learning_rate, weight_decay=ds_cfg.weight_decay, seed=cfg.seed)
     if name == "mc_dropout":
         from .mc_dropout import MCDropoutPredictor
-        return MCDropoutPredictor(data.feature_shape, data.n_classes)
+        return MCDropoutPredictor(data.feature_shape, data.n_classes, hidden_dim=ds_cfg.hidden_dim, epochs=ds_cfg.epochs, batch_size=ds_cfg.batch_size, learning_rate=ds_cfg.learning_rate, weight_decay=ds_cfg.weight_decay, seed=cfg.seed, dropout=ds_cfg.dropout, samples=cfg.members)
     raise ValueError(f"Unknown method '{name}'.")
 
 

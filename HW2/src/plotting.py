@@ -1,8 +1,28 @@
 from pathlib import Path
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import torch
 from .data import DatasetBundle
-from .methods.base import Prediction
+
+# Categorical slots, validated together (all-pairs CVD/normal-vision pass).
+# Aqua is below 3:1 contrast, so every series here also has a legend and its own marker.
+BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
+NEUTRAL = "#8a8984"
+TEXT_SECONDARY = "#52514e"
+# Fixed entity colors, used the same way in every figure.
+MEMBER_COLOR, ENSEMBLE_COLOR = BLUE, ORANGE
+SPLIT_STYLE = {"test": {"color": BLUE, "marker": "o"}, "train": {"color": AQUA, "marker": "s"}}
+
+
+def _style(ax) -> None:
+    """Recessive axes: no top/right spines, light grid behind the data."""
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(NEUTRAL)
+    ax.tick_params(colors=TEXT_SECONDARY, labelsize=8)
+    ax.grid(True, color="#e4e3df", linewidth=0.6)
+    ax.set_axisbelow(True)
 
 
 def plot_2d_surface(dataset: DatasetBundle, predictor, path: Path) -> Path:
@@ -25,19 +45,97 @@ def plot_2d_surface(dataset: DatasetBundle, predictor, path: Path) -> Path:
     return path
 
 
-def plot_ensemble_size_sweep(rows: list[dict[str, float]], path: Path) -> Path:
-    """Plot the required ensemble-size accuracy/uncertainty comparison."""
+SWEEP_PANELS = (("error", "error rate"), ("nll", "NLL (nats)"), ("ece", "ECE"), ("entropy", "predictive entropy (nats)"), ("mi", "mutual information (nats)"))
+
+
+def plot_ensemble_size_sweep(summary: list[dict], path: Path) -> Path:
+    """Metrics vs. number of members, with +/-1 sd over k-member subsets.
+
+    `summary` rows: members, split, and <metric>_mean / <metric>_std for each panel.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    sizes = [row["members"] for row in rows]
-    fig, axes = plt.subplots(1, 2, figsize=(9, 3.6), constrained_layout=True)
-    axes[0].plot(sizes, [row["train_accuracy"] for row in rows], "o-", label="train")
-    axes[0].plot(sizes, [row["test_accuracy"] for row in rows], "o-", label="test")
-    axes[0].set(xlabel="number of members", ylabel="accuracy", title="Performance vs. ensemble size")
-    axes[0].legend()
-    axes[1].plot(sizes, [row["test_predictive_entropy"] for row in rows], "o-", label="predictive entropy")
-    axes[1].plot(sizes, [row["test_mutual_information"] for row in rows], "o-", label="mutual information")
-    axes[1].set(xlabel="number of members", ylabel="nats", title="Test uncertainty vs. ensemble size")
-    axes[1].legend()
+    sizes = sorted({int(row["members"]) for row in summary})
+    fig, axes = plt.subplots(2, 3, figsize=(11, 6.2), constrained_layout=True)
+    flat = axes.ravel()
+    for ax, (metric, label) in zip(flat, SWEEP_PANELS):
+        _style(ax)
+        single = [row for row in summary if row["split"] == "test" and int(row["members"]) == 1]
+        if metric in ("error", "nll") and single:
+            # Reference band: the spread of individual members on the test set (k=1).
+            mean, std = single[0][f"{metric}_mean"], single[0][f"{metric}_std"]
+            ax.axhspan(mean - std, mean + std, color=NEUTRAL, alpha=0.15, linewidth=0, label="single member, test (±1 sd)")
+        for split in ("train", "test"):
+            rows = sorted((row for row in summary if row["split"] == split), key=lambda row: row["members"])
+            ax.errorbar([row["members"] for row in rows], [row[f"{metric}_mean"] for row in rows], yerr=[row[f"{metric}_std"] for row in rows],
+                        linewidth=2, markersize=6, capsize=3, label=split, **SPLIT_STYLE[split])
+        ax.set_xscale("log")
+        ax.set_xticks(sizes, [str(size) for size in sizes])
+        ax.minorticks_off()
+        ax.set_xlabel("number of members", fontsize=9, color=TEXT_SECONDARY)
+        ax.set_title(label, fontsize=10, loc="left")
+    # The sixth cell holds the shared legend.
+    flat[-1].axis("off")
+    handles, labels = flat[0].get_legend_handles_labels()
+    flat[-1].legend(handles, labels, loc="center", frameon=False, title="error bars: ±1 sd over\nk-member subsets", fontsize=9, title_fontsize=9)
+    fig.suptitle("Performance and uncertainty vs. ensemble size", fontsize=11, x=0.01, ha="left")
+    fig.savefig(path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def plot_training_curves(history: list[dict], path: Path) -> Path:
+    """Loss and accuracy per epoch on train and test: member mean +/-1 sd and the ensemble."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    epochs = sorted({int(row["epoch"]) for row in history})
+    fig, axes = plt.subplots(2, 2, figsize=(10, 6.2), sharex=True, constrained_layout=True)
+    for col, split in enumerate(("train", "test")):
+        rows = [row for row in history if row["split"] == split]
+        for row_index, (metric, label) in enumerate((("loss", "NLL (nats)"), ("accuracy", "accuracy"))):
+            ax = axes[row_index, col]
+            _style(ax)
+            members = torch.tensor([[row[metric] for row in rows if row["member"] != "ensemble" and int(row["epoch"]) == epoch] for epoch in epochs])
+            mean, std = members.mean(1), members.std(1, unbiased=False)
+            ensemble = [next(row[metric] for row in rows if row["member"] == "ensemble" and int(row["epoch"]) == epoch) for epoch in epochs]
+            ax.fill_between(epochs, mean - std, mean + std, color=MEMBER_COLOR, alpha=0.2, linewidth=0, label="members ±1 sd")
+            ax.plot(epochs, mean, color=MEMBER_COLOR, linewidth=2, label=f"member mean (n={members.shape[1]})")
+            ax.plot(epochs, ensemble, color=ENSEMBLE_COLOR, linewidth=2, label="ensemble")
+            ax.set_title(f"{split} {label}", fontsize=10, loc="left")
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            if row_index == 1:
+                ax.set_xlabel("epoch", fontsize=9, color=TEXT_SECONDARY)
+    axes[0, 0].legend(frameon=False, fontsize=8)
+    fig.suptitle("Training curves", fontsize=11, x=0.01, ha="left")
+    fig.savefig(path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def plot_reliability(curves: dict[str, dict], path: Path, min_count: int = 10) -> Path:
+    """Reliability diagram (top) and confidence histogram (bottom) on the test set.
+
+    `curves` maps a label to {"bins": reliability_bins(...) output, "ece": float, "color": hex}.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig, (top, bottom) = plt.subplots(2, 1, figsize=(5.2, 6), sharex=True, gridspec_kw={"height_ratios": [3, 1]}, constrained_layout=True)
+    for ax in (top, bottom):
+        _style(ax)
+    top.plot([0, 1], [0, 1], color=NEUTRAL, linestyle="--", linewidth=1, label="perfect calibration")
+    n_curves = len(curves)
+    for index, (label, curve) in enumerate(curves.items()):
+        bins = curve["bins"]
+        # Nearly empty bins give noisy accuracies; the histogram still shows them.
+        filled = bins["count"] >= min_count
+        top.plot(bins["confidence"][filled], bins["accuracy"][filled], color=curve["color"], linewidth=2, marker="o", markersize=6, label=f"{label} (ECE {curve['ece']:.3f})")
+        n_bins = len(bins["count"])
+        width = 1 / n_bins / n_curves
+        lefts = torch.arange(n_bins) / n_bins + index * width
+        bottom.bar(lefts, bins["count"] / bins["count"].sum(), width=width * 0.9, align="edge", color=curve["color"])
+    top.set(xlim=(0, 1), ylim=(0, 1))
+    top.set_ylabel("accuracy", fontsize=9, color=TEXT_SECONDARY)
+    top.set_title(f"Test reliability (bins with ≥{min_count} samples)", fontsize=10, loc="left")
+    top.legend(frameon=False, fontsize=8, loc="upper left")
+    bottom.set_ylabel("fraction", fontsize=9, color=TEXT_SECONDARY)
+    bottom.set_xlabel("confidence (max probability)", fontsize=9, color=TEXT_SECONDARY)
     fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path

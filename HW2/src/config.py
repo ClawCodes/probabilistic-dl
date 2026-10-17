@@ -18,6 +18,7 @@ class DatasetConfig:
     learning_rate: float = 1e-3
     weight_decay: float = 1e-4  # L2/Gaussian-prior precision coefficient
     hidden_dim: int = 64
+    dropout: float = 0.1  # MC dropout only; ensemble members are dropout-free
 
 
 def default_datasets() -> dict[str, DatasetConfig]:
@@ -30,9 +31,12 @@ def default_datasets() -> dict[str, DatasetConfig]:
 @dataclass(frozen=True)
 class ExperimentConfig:
     seed: int = 7
-    methods: tuple[str, ...] = ("ensemble",)
+    methods: tuple[str, ...] = ("ensemble", "mc_dropout")
     # Members are trained once for max(ensemble_sizes); smaller sizes are prefixes.
     ensemble_sizes: tuple[int, ...] = (1, 2, 5, 10)
+    # Analysis: max k-member subsets drawn per size for error bars, and ECE bin count.
+    subset_draws: int = 20
+    ece_bins: int = 15
     datasets: dict[str, DatasetConfig] = field(default_factory=default_datasets)
 
     @property
@@ -41,6 +45,7 @@ class ExperimentConfig:
 
     def to_dict(self) -> dict:
         return {"seed": self.seed, "methods": list(self.methods), "ensemble_sizes": list(self.ensemble_sizes),
+                "subset_draws": self.subset_draws, "ece_bins": self.ece_bins,
                 "datasets": {name: asdict(ds) for name, ds in self.datasets.items()}}
 
     @classmethod
@@ -70,6 +75,8 @@ class ExperimentConfig:
             raise ValueError("Config needs at least one method and one dataset.")
         if not self.ensemble_sizes or min(self.ensemble_sizes) < 1:
             raise ValueError("ensemble_sizes must be non-empty positive integers.")
+        if self.subset_draws < 1 or self.ece_bins < 1:
+            raise ValueError("subset_draws and ece_bins must be positive.")
 
     def with_override(self, key: str, raw_value: str) -> "ExperimentConfig":
         """Apply a `dataset.field=value` override, casting to the field's type."""
