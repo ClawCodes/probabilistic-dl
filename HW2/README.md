@@ -72,6 +72,11 @@ python -m src.pipeline --dir run_1 --step plot
 ```
 outputs/run_N/
   config.json                # the exact config of this run
+  <dataset>/
+    function_space.csv       # plot: PC1/PC2 of each member's flattened test probabilities (shared PCA)
+    disagreement.csv         # plot: per member pair, fraction of test inputs with a different top-1 class
+    figures/
+      function_space.png     # members of all methods in one PCA + per-method disagreement heatmaps
   <dataset>/<method>/
     weights/                 # train: member_XX.pt (ensemble) or model.pt (mc_dropout)
     history.csv              # train: member, epoch, split, loss, accuracy

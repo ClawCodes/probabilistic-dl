@@ -35,6 +35,12 @@ def ece(probs: torch.Tensor, y: torch.Tensor, bins: int = 15) -> float:
     return (weights * (table["accuracy"] - table["confidence"]).abs()).sum().item()
 
 
+def pairwise_disagreement(samples: torch.Tensor) -> torch.Tensor:
+    """(S, S) fraction of inputs where members i and j predict a different top-1 class, from (S, N, C)."""
+    predicted = samples.argmax(2)
+    return (predicted[:, None, :] != predicted[None, :, :]).float().mean(2)
+
+
 def split_metrics(probs: torch.Tensor, y: torch.Tensor) -> dict[str, float]:
     """The loss/accuracy pair recorded per epoch in history.csv."""
     return {"loss": nll(probs, y), "accuracy": accuracy(probs, y)}

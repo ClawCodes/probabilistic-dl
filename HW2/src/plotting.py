@@ -12,6 +12,8 @@ TEXT_SECONDARY = "#52514e"
 # Fixed entity colors, used the same way in every figure.
 MEMBER_COLOR, ENSEMBLE_COLOR = BLUE, ORANGE
 SPLIT_STYLE = {"test": {"color": BLUE, "marker": "o"}, "train": {"color": AQUA, "marker": "s"}}
+METHOD_STYLE = {"ensemble": {"color": BLUE, "marker": "o", "label": "deep ensemble"},
+                "mc_dropout": {"color": ORANGE, "marker": "s", "label": "MC dropout"}}
 
 
 def _style(ax) -> None:
@@ -136,6 +138,55 @@ def plot_reliability(curves: dict[str, dict], path: Path, min_count: int = 10) -
     top.legend(frameon=False, fontsize=8, loc="upper left")
     bottom.set_ylabel("fraction", fontsize=9, color=TEXT_SECONDARY)
     bottom.set_xlabel("confidence (max probability)", fontsize=9, color=TEXT_SECONDARY)
+    fig.savefig(path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def plot_function_space(points: dict[str, torch.Tensor], explained: torch.Tensor, disagreement: dict[str, torch.Tensor], errors: dict[str, float], path: Path) -> Path:
+    """Members of every method in one shared PCA of their test predictions (left), and
+    each method's pairwise top-1 disagreement on a shared color scale (right).
+
+    `points` maps method -> (S, 2) PCA coordinates, `explained` is the variance ratio of
+    each component, `disagreement` maps method -> (S, S), `errors` maps method -> test error.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    methods = list(points)
+    fig, axes = plt.subplots(1, 1 + len(methods), figsize=(4.6 + 3.4 * len(methods), 4.2), constrained_layout=True,
+                             gridspec_kw={"width_ratios": [1.35] + [1] * len(methods)})
+    scatter = axes[0]
+    _style(scatter)
+    for method, coords in points.items():
+        style = METHOD_STYLE.get(method, {"color": NEUTRAL, "marker": "o", "label": method})
+        scatter.scatter(coords[:, 0], coords[:, 1], s=48, color=style["color"], marker=style["marker"], edgecolor="white", linewidth=1,
+                        label=f"{style['label']} members", zorder=3)
+        # Averaging probabilities is linear, so the method's prediction sits at its members' centroid.
+        center = coords.mean(0)
+        scatter.scatter(center[0], center[1], s=110, facecolor="none", edgecolor=style["color"], marker=style["marker"], linewidth=2,
+                        label=f"{style['label']} average", zorder=4)
+    scatter.set_aspect("equal", adjustable="datalim")
+    scatter.set_xlabel(f"PC 1 ({explained[0]:.0%} of variance)", fontsize=9, color=TEXT_SECONDARY)
+    scatter.set_ylabel(f"PC 2 ({explained[1]:.0%} of variance)", fontsize=9, color=TEXT_SECONDARY)
+    scatter.set_title("Members in function space (test predictions)", fontsize=10, loc="left")
+    # Below the axes, so it never covers a member or centroid.
+    scatter.legend(frameon=False, fontsize=8, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.16))
+    vmax = max(matrix.max().item() for matrix in disagreement.values())
+    for ax, (method, matrix) in zip(axes[1:], disagreement.items()):
+        n = matrix.shape[0]
+        off_diagonal = ~torch.eye(n, dtype=torch.bool)
+        shown = matrix.clone()
+        shown[~off_diagonal] = float("nan")  # self-disagreement is always 0
+        image = ax.imshow(shown.numpy(), cmap="Blues", vmin=0, vmax=vmax)
+        ax.set_xticks(range(n)); ax.set_yticks(range(n))
+        ax.tick_params(colors=TEXT_SECONDARY, labelsize=7, length=0)
+        for side in ax.spines.values():
+            side.set_visible(False)
+        ax.set_xlabel("member", fontsize=9, color=TEXT_SECONDARY)
+        ax.set_ylabel("member", fontsize=9, color=TEXT_SECONDARY)
+        label = METHOD_STYLE.get(method, {"label": method})["label"]
+        ax.set_title(f"{label}: mean disagreement {matrix[off_diagonal].mean():.3f}\n(averaged-model test error {errors[method]:.3f})", fontsize=9, loc="left")
+    fig.colorbar(image, ax=axes[1:].tolist(), shrink=0.8, label="fraction of test inputs with different top-1 class")
+    fig.suptitle("Functional diversity: how differently do members predict?", fontsize=11, x=0.01, ha="left")
     fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path

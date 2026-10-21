@@ -20,8 +20,8 @@ import torch
 from .config import ExperimentConfig, next_run_dir, resolve_run_dir
 from .data import DatasetBundle, load_dataset
 from .methods import PredictiveModel, build_method, prediction_from_samples
-from .metrics import accuracy, ece, error_rate, nll, reliability_bins
-from .plotting import ENSEMBLE_COLOR, MEMBER_COLOR, SWEEP_PANELS, plot_2d_surface, plot_ensemble_size_sweep, plot_reliability, plot_training_curves
+from .metrics import accuracy, ece, error_rate, nll, pairwise_disagreement, reliability_bins
+from .plotting import ENSEMBLE_COLOR, MEMBER_COLOR, SWEEP_PANELS, plot_2d_surface, plot_ensemble_size_sweep, plot_function_space, plot_reliability, plot_training_curves
 
 STEPS = ("train", "plot")
 CONFIG_FLAGS = ("config", "seed", "methods", "ensemble_sizes", "set")
@@ -29,6 +29,8 @@ CONFIG_FLAGS = ("config", "seed", "methods", "ensemble_sizes", "set")
 # Files each step owns inside run_N/<dataset>/<method>/; a step wipes only its own.
 TRAIN_ARTIFACTS = ("weights", "history.csv", "metrics.json")
 PLOT_ARTIFACTS = ("size_sweep.csv", "size_sweep_summary.csv", "figures")
+# Cross-method plot artifacts inside run_N/<dataset>/.
+DATASET_PLOT_ARTIFACTS = ("function_space.csv", "disagreement.csv", "figures")
 STRING_COLUMNS = ("member", "split")
 
 Models = dict[tuple[str, str], PredictiveModel]
@@ -150,10 +152,40 @@ def size_sweep(samples: dict[str, tuple[torch.Tensor, torch.Tensor]], cfg: Exper
     return rows, summary
 
 
+def function_space(test_samples: dict[str, torch.Tensor], y: torch.Tensor, out: Path) -> Path:
+    """Shared PCA of every member's flattened test probabilities, plus pairwise disagreement.
+
+    Members are compared by what they predict, not by their hidden units, so members
+    of different networks (and of different methods) live in one comparable space.
+    """
+    methods = list(test_samples)
+    flat = torch.cat([test_samples[method].flatten(1) for method in methods])
+    centered = flat - flat.mean(0)
+    _, singular, vh = torch.linalg.svd(centered, full_matrices=False)
+    coords = centered @ vh[:2].T
+    explained = singular.square() / singular.square().sum()
+    points, disagreement, point_rows, pair_rows = {}, {}, [], []
+    start = 0
+    for method in methods:
+        n = test_samples[method].shape[0]
+        points[method] = coords[start:start + n]
+        start += n
+        disagreement[method] = pairwise_disagreement(test_samples[method])
+        point_rows += [{"method": method, "member": member, "pc1": x, "pc2": z} for member, (x, z) in enumerate(points[method].tolist())]
+        pair_rows += [{"method": method, "member_a": a, "member_b": b, "disagreement": disagreement[method][a, b].item()}
+                      for a, b in itertools.combinations(range(n), 2)]
+    write_csv(out / "function_space.csv", point_rows)
+    write_csv(out / "disagreement.csv", pair_rows)
+    errors = {method: error_rate(test_samples[method].mean(0), y) for method in methods}
+    return plot_function_space(points, explained, disagreement, errors, out / "figures" / "function_space.png")
+
+
 def plot(run_dir: Path, cfg: ExperimentConfig, datasets: dict[str, DatasetBundle], models: Models | None = None) -> None:
     models = models or {}
     for dataset_name, ds_cfg in cfg.datasets.items():
         data = datasets[dataset_name]
+        clear(run_dir / dataset_name, DATASET_PLOT_ARTIFACTS)
+        test_by_method = {}
         for method in cfg.methods:
             out = method_dir(run_dir, dataset_name, method)
             history = read_csv(out / "history.csv")
@@ -171,6 +203,7 @@ def plot(run_dir: Path, cfg: ExperimentConfig, datasets: dict[str, DatasetBundle
             write_csv(out / "size_sweep.csv", rows)
             write_csv(out / "size_sweep_summary.csv", summary)
             test_samples, y_test = samples["test"]
+            test_by_method[method] = test_samples
             reliability = {
                 "single member": {"probs": test_samples[0], "color": MEMBER_COLOR},
                 f"ensemble (k={cfg.members})": {"probs": test_samples.mean(0), "color": ENSEMBLE_COLOR},
@@ -186,6 +219,8 @@ def plot(run_dir: Path, cfg: ExperimentConfig, datasets: dict[str, DatasetBundle
                 figures.append(plot_2d_surface(data, model, out / "figures" / "surface.png"))
             for figure in figures:
                 print(f"[plot] saved {figure.relative_to(run_dir.parent)}")
+        figure = function_space(test_by_method, data.y_test, run_dir / dataset_name)
+        print(f"[plot] saved {figure.relative_to(run_dir.parent)}")
 
 
 def main() -> None:

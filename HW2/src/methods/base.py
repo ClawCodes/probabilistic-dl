@@ -14,7 +14,7 @@ class Prediction:
 
 def prediction_from_samples(samples: torch.Tensor) -> Prediction:
     """Summarize stacked per-sample probabilities of shape (S, N, C)."""
-    mean = samples.mean(dim=0)
+    mean = samples.mean(dim=0) # mean across members
     entropy = -(mean * mean.clamp_min(1e-12).log()).sum(dim=1)
     member_entropy = -(samples * samples.clamp_min(1e-12).log()).sum(dim=2).mean(dim=0)
     return Prediction(mean, entropy, member_entropy, entropy - member_entropy)
