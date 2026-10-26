@@ -1,0 +1,33 @@
+{
+  "seed": 7,
+  "methods": [
+    "ensemble",
+    "mc_dropout"
+  ],
+  "ensemble_sizes": [
+    1,
+    2,
+    5,
+    10
+  ],
+  "subset_draws": 20,
+  "ece_bins": 15,
+  "datasets": {
+    "two_moons": {
+      "epochs": 200,
+      "batch_size": 128,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "hidden_dim": 64,
+      "dropout": 0.1
+    },
+    "fashion_mnist": {
+      "epochs": 20,
+      "batch_size": 256,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "hidden_dim": 256,
+      "dropout": 0.1
+    }
+  }
+}

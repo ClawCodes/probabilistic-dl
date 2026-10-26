@@ -41,13 +41,13 @@ def plot_2d_surface(dataset: DatasetBundle, predictor, path: Path) -> Path:
     image = axes[1].contourf(xx.numpy(), yy.numpy(), pred.mutual_information.reshape(xx.shape).numpy(), levels=30, cmap="magma")
     axes[1].scatter(dataset.x_train[:, 0], dataset.x_train[:, 1], c=dataset.y_train, cmap="RdBu", edgecolor="white", s=18)
     axes[1].set(title="Epistemic uncertainty (MI)", xlabel="$x_1$", ylabel="$x_2$")
-    fig.colorbar(image, ax=axes[1], label="nats")
+    fig.colorbar(image, ax=axes[1],)
     fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path
 
 
-SWEEP_PANELS = (("error", "error rate"), ("nll", "NLL (nats)"), ("ece", "ECE"), ("entropy", "predictive entropy (nats)"), ("mi", "mutual information (nats)"))
+SWEEP_PANELS = (("error", "error rate"), ("nll", "NLL"), ("ece", "ECE"), ("entropy", "predictive entropy"), ("mi", "mutual information"))
 
 
 def plot_ensemble_size_sweep(summary: list[dict], path: Path) -> Path:
@@ -61,11 +61,6 @@ def plot_ensemble_size_sweep(summary: list[dict], path: Path) -> Path:
     flat = axes.ravel()
     for ax, (metric, label) in zip(flat, SWEEP_PANELS):
         _style(ax)
-        single = [row for row in summary if row["split"] == "test" and int(row["members"]) == 1]
-        if metric in ("error", "nll") and single:
-            # Reference band: the spread of individual members on the test set (k=1).
-            mean, std = single[0][f"{metric}_mean"], single[0][f"{metric}_std"]
-            ax.axhspan(mean - std, mean + std, color=NEUTRAL, alpha=0.15, linewidth=0, label="single member, test (±1 sd)")
         for split in ("train", "test"):
             rows = sorted((row for row in summary if row["split"] == split), key=lambda row: row["members"])
             ax.errorbar([row["members"] for row in rows], [row[f"{metric}_mean"] for row in rows], yerr=[row[f"{metric}_std"] for row in rows],
@@ -74,12 +69,12 @@ def plot_ensemble_size_sweep(summary: list[dict], path: Path) -> Path:
         ax.set_xticks(sizes, [str(size) for size in sizes])
         ax.minorticks_off()
         ax.set_xlabel("number of members", fontsize=9, color=TEXT_SECONDARY)
-        ax.set_title(label, fontsize=10, loc="left")
+        ax.set_title(label, fontsize=10, loc="center")
     # The sixth cell holds the shared legend.
     flat[-1].axis("off")
     handles, labels = flat[0].get_legend_handles_labels()
     flat[-1].legend(handles, labels, loc="center", frameon=False, title="error bars: ±1 sd over\nk-member subsets", fontsize=9, title_fontsize=9)
-    fig.suptitle("Performance and uncertainty vs. ensemble size", fontsize=11, x=0.01, ha="left")
+    fig.suptitle("Performance and uncertainty vs. ensemble size", fontsize=11, x=0.5, ha="center")
     fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path
@@ -92,7 +87,7 @@ def plot_training_curves(history: list[dict], path: Path) -> Path:
     fig, axes = plt.subplots(2, 2, figsize=(10, 6.2), sharex=True, constrained_layout=True)
     for col, split in enumerate(("train", "test")):
         rows = [row for row in history if row["split"] == split]
-        for row_index, (metric, label) in enumerate((("loss", "NLL (nats)"), ("accuracy", "accuracy"))):
+        for row_index, (metric, label) in enumerate((("loss", "NLL"), ("accuracy", "accuracy"))):
             ax = axes[row_index, col]
             _style(ax)
             members = torch.tensor([[row[metric] for row in rows if row["member"] != "ensemble" and int(row["epoch"]) == epoch] for epoch in epochs])
@@ -101,12 +96,12 @@ def plot_training_curves(history: list[dict], path: Path) -> Path:
             ax.fill_between(epochs, mean - std, mean + std, color=MEMBER_COLOR, alpha=0.2, linewidth=0, label="members ±1 sd")
             ax.plot(epochs, mean, color=MEMBER_COLOR, linewidth=2, label=f"member mean (n={members.shape[1]})")
             ax.plot(epochs, ensemble, color=ENSEMBLE_COLOR, linewidth=2, label="ensemble")
-            ax.set_title(f"{split} {label}", fontsize=10, loc="left")
+            ax.set_title(f"{split} {label}", fontsize=10, loc="center")
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
             if row_index == 1:
                 ax.set_xlabel("epoch", fontsize=9, color=TEXT_SECONDARY)
     axes[0, 0].legend(frameon=False, fontsize=8)
-    fig.suptitle("Training curves", fontsize=11, x=0.01, ha="left")
+    fig.suptitle("Training curves", fontsize=11, x=0.5, ha="center")
     fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path
@@ -134,7 +129,7 @@ def plot_reliability(curves: dict[str, dict], path: Path, min_count: int = 10) -
         bottom.bar(lefts, bins["count"] / bins["count"].sum(), width=width * 0.9, align="edge", color=curve["color"])
     top.set(xlim=(0, 1), ylim=(0, 1))
     top.set_ylabel("accuracy", fontsize=9, color=TEXT_SECONDARY)
-    top.set_title(f"Test reliability (bins with ≥{min_count} samples)", fontsize=10, loc="left")
+    top.set_title(f"Test reliability (bins with ≥{min_count} samples)", fontsize=10, loc="center")
     top.legend(frameon=False, fontsize=8, loc="upper left")
     bottom.set_ylabel("fraction", fontsize=9, color=TEXT_SECONDARY)
     bottom.set_xlabel("confidence (max probability)", fontsize=9, color=TEXT_SECONDARY)
@@ -167,7 +162,7 @@ def plot_function_space(points: dict[str, torch.Tensor], explained: torch.Tensor
     scatter.set_aspect("equal", adjustable="datalim")
     scatter.set_xlabel(f"PC 1 ({explained[0]:.0%} of variance)", fontsize=9, color=TEXT_SECONDARY)
     scatter.set_ylabel(f"PC 2 ({explained[1]:.0%} of variance)", fontsize=9, color=TEXT_SECONDARY)
-    scatter.set_title("Members in function space (test predictions)", fontsize=10, loc="left")
+    scatter.set_title("Members in function space (test predictions)", fontsize=10, loc="center")
     # Below the axes, so it never covers a member or centroid.
     scatter.legend(frameon=False, fontsize=8, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.16))
     vmax = max(matrix.max().item() for matrix in disagreement.values())
@@ -184,9 +179,9 @@ def plot_function_space(points: dict[str, torch.Tensor], explained: torch.Tensor
         ax.set_xlabel("member", fontsize=9, color=TEXT_SECONDARY)
         ax.set_ylabel("member", fontsize=9, color=TEXT_SECONDARY)
         label = METHOD_STYLE.get(method, {"label": method})["label"]
-        ax.set_title(f"{label}: mean disagreement {matrix[off_diagonal].mean():.3f}\n(averaged-model test error {errors[method]:.3f})", fontsize=9, loc="left")
+        ax.set_title(f"{label}: mean disagreement {matrix[off_diagonal].mean():.3f}\n(averaged-model test error {errors[method]:.3f})", fontsize=9, loc="center")
     fig.colorbar(image, ax=axes[1:].tolist(), shrink=0.8, label="fraction of test inputs with different top-1 class")
-    fig.suptitle("Functional diversity: how differently do members predict?", fontsize=11, x=0.01, ha="left")
+    fig.suptitle("Functional diversity: how differently do members predict?", fontsize=11, x=0.5, ha="center")
     fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path

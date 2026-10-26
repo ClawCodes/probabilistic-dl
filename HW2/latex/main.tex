@@ -1,50 +1,203 @@
 \documentclass[10pt]{article}
 \usepackage[letterpaper,margin=0.8in]{geometry}
-\usepackage{amsmath,amssymb,booktabs,graphicx,hyperref}
+\usepackage{amsmath,amssymb,booktabs,graphicx,hyperref,xcolor,placeins}
 \graphicspath{{figs/}}
 \title{Deep Ensembles for Predictive Uncertainty}
 \author{Nicole Lacey \and Christopher Lawton}
 \date{}
+
+% Writing notes from proposal.md; delete each one once its section is written.
+\newcommand{\plan}[1]{{\color{gray}[#1]}}
+
+% Deep ensemble | MC dropout, side by side, for one figure of one dataset.
+% #1 dataset folder under figs/, #2 figure file name.
+\newcommand{\methodpair}[2]{%
+  \begin{minipage}[t]{0.495\linewidth}\centering
+    \includegraphics[width=\linewidth]{#1/ensemble/figures/#2}\\{\small (a) Deep ensemble}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.495\linewidth}\centering
+    \includegraphics[width=\linewidth]{#1/mc_dropout/figures/#2}\\{\small (b) MC dropout}
+  \end{minipage}}
+
 \begin{document}
 \maketitle
 
-\begin{abstract}
-State the task, datasets, compared methods, and the main empirical conclusions in 100--150 words. Write this last.
-\end{abstract}
+\section{Introduction}
+Neural network classifier performance is typically evaluated by its accuracy, however in many scenarios the probabilities a network assigns to its predictions matters as much as the predictions and raw accuracy.
+It is frequently observed that a model's assigned probability is a poor descriptor to a model's true confidence of a given prediction (i.e. when a model is poorly calibrated).
+A simple approach to provide insight into model uncertainty is through ensembling, by averaging the predictions of several models, the ensemble becomes less confident when the members disagree.
+In this report we compare two different methods of ensembling.
+A standard deep ensemble which consists of several networks trained separately from different random initializations, and MC dropout where a single network with dropout is trained and each stochastic forward pass at test time represents a single member of the ensemble.
+We first evaluate both models on a simple two-dimensional problem where predictive uncertainty can be visualized directly and then evaluate them on Fashion-MNIST.
+For each method we examine the full ensemble and its individual members with respect to accuracy, predictive uncertainty and calibration, as well as the diversity of their predictions.
 
-\section{Question and experimental design}
-Explain why predictive uncertainty matters. State the task, 2-D synthetic sanity check, realistic high-dimensional dataset (recommended: Fashion-MNIST), train/test splits, preprocessing, and fixed seeds. Define train/test accuracy or error, predictive entropy, expected data uncertainty, and mutual information. State how hyperparameters were selected without using the test set.
+\section{Setup}
 
-\section{Methods}
+\subsection{Data}
+\plan{Two moons: 500 train / 1{,}000 test points, noise 0.12; 2-D, so predictions can be plotted over the whole input plane.
+Fashion-MNIST: 60{,}000 train / 10{,}000 test $28\times28$ grayscale images, 10 classes; several classes look alike (shirt, T-shirt, pullover, coat), which gives real aleatoric uncertainty.}
+
+\subsection{Model and training}
+\plan{Both methods use the same MLP (Flatten, two hidden ReLU layers of width 64 for two moons / 256 for Fashion-MNIST, linear output), Adam with learning rate $10^{-3}$, and 200 / 20 epochs with batch size 128 / 256.
+State the L2 term: weight decay $10^{-4}$, equivalent to a zero-mean isotropic Gaussian prior on the weights.
+The only differences between the methods are dropout and how members are produced.}
+
 \subsection{Standard deep ensembles}
-Describe independently initialized models trained on identical data with distinct data-order seeds. Give the averaged predictive distribution $p(y\mid x,\mathcal D) \approx M^{-1}\sum_m p_m(y\mid x)$. State architecture, optimizer, learning rate, epochs, and ensemble sizes. Explain the L2 loss term and its isotropic zero-mean Gaussian-prior interpretation; report its coefficient.
+\plan{$M=10$ networks, member $m$ seeded \texttt{seed}$+m$ (initialization and data order), no dropout.}
+The ensemble prediction averages the members' predicted probabilities,
+\begin{equation}
+  \bar p(y \mid x) = \frac{1}{M} \sum_{m=1}^{M} p_m(y \mid x),
+  \label{eq:average}
+\end{equation}
+a Monte Carlo estimate of the predictive distribution $p(y \mid x, \mathcal D)$.
 
-\subsection{Comparison method: MC dropout}
-When implemented, describe dropout placement/rate, number of stochastic passes, training objective, and retaining dropout at test time. Explain approximate Bayesian sampling and keep setup comparable to the ensemble.
+\subsection{MC dropout}
+\plan{One network with dropout $p=0.1$ after each hidden layer, trained with the same objective (approximate variational inference, Gal \& Ghahramani).
+Dropout stays on at test time; $T=10$ stochastic passes are each treated as a member and averaged as in Eq.~\eqref{eq:average}.
+Masks use a fixed seed, so results are reproducible.}
 
-\section{Results on the 2-D synthetic task}
-Show decision probabilities and uncertainty surfaces. Verify uncertainty behavior away from observations and at ambiguous boundaries; discuss failures. Compare train/test performance. Vary $M\in\{1,2,5,10\}$ and interpret accuracy/error, predictive entropy, and mutual information.
+\subsection{Evaluation metrics}
+\plan{One sentence each on what the metric captures; definitions and code pointers are in \texttt{notes.md}.}
+All metrics except the entropy decomposition and disagreement are computed on $\bar p$.
+\begin{itemize}
+  \item \textbf{Error rate}: fraction of inputs where $\arg\max_c \bar p(c \mid x) \ne y$.
+  \item \textbf{Negative log-likelihood} (nats): $\mathrm{NLL} = -\frac{1}{N}\sum_{n} \ln \bar p(y_n \mid x_n)$.
+  \item \textbf{Expected calibration error}: with confidence $\max_c \bar p(c \mid x)$ split into $B=15$ equal-width bins,
+    $\mathrm{ECE} = \sum_{b} \frac{n_b}{N}\,\lvert \mathrm{acc}(b) - \mathrm{conf}(b) \rvert$, shown in full by reliability diagrams.
+  \item \textbf{Entropy decomposition}: predictive entropy (total) splits into expected entropy (aleatoric) and mutual information (epistemic),
+    \begin{equation}
+      \underbrace{H[\bar p]}_{\text{predictive}} = \underbrace{\frac{1}{M}\sum_m H[p_m]}_{\text{expected}} + \underbrace{\mathrm{MI}}_{\text{epistemic}},
+      \qquad H[p] = -\sum_c p_c \ln p_c .
+    \end{equation}
+  \item \textbf{Pairwise disagreement}: fraction of test inputs on which two members predict a different class; a PCA of each member's test predictions (\emph{function space}) shows the same diversity visually.
+\end{itemize}
 
-\begin{figure}[t]
-\centering
-\IfFileExists{figs/ensemble_2d_surface.png}{\includegraphics[width=\linewidth]{ensemble_2d_surface.png}}{\fbox{Run the 2-D ensemble experiment to create this figure.}}
-\caption{Standard deep-ensemble predictive probability and epistemic uncertainty on two moons. Explain observed regions.}
-\label{fig:synthetic}
+\subsection{Ensemble-size protocol}
+\plan{Train $M=10$ once; evaluate subsets of size $k \in \{1,2,5,10\}$ (every subset when there are at most 20, else 20 random ones).
+Error bars are $\pm1$ sd over subsets; they shrink at large $k$ partly because subsets overlap, and $k=10$ is a single subset.
+The test set is used for evaluation only, never for model selection.}
+
+\section{Evaluation}
+Figures show the deep ensemble (a) and MC dropout (b) side by side; each panel has its own y-axis range, so compare values rather than curve heights.
+
+\subsection{Two moons}
+
+\subsubsection{Training curves}
+\plan{Both converge by about epoch 75 (99.4\% test accuracy); test NLL keeps falling slowly to epoch 200 with no overfitting.
+Ensemble and member-mean curves overlap from about epoch 10: the final gain from ensembling is $-0.04\%$ (DE) and $+0.07\%$ (MC), i.e.\ nothing.}
+
+\begin{figure}[htbp]
+  \centering
+  \methodpair{two_moons}{training_curves.png}
+  \caption{Two moons training curves: member mean $\pm1$ sd and the averaged prediction, on train and test.}
+  \label{fig:tm-training}
 \end{figure}
 
-\begin{figure}[t]
-\centering
-\IfFileExists{figs/ensemble_size_sweep_two_moons.png}{\includegraphics[width=\linewidth]{ensemble_size_sweep_two_moons.png}}{\fbox{Run the ensemble-size sweep to create this figure.}}
-\caption{Training and test performance plus uncertainty summaries as ensemble size changes. Discuss diminishing returns and variability.}
-\label{fig:size}
+\subsubsection{Ensemble size}
+\plan{Flat for both methods. Test error is 0.5\% (5 of 1{,}000 points), and changes with $k$ are under one test point (e.g.\ 0.46\%$\to$0.50\%); the auto-scaled axes make noise look like trends.
+Values are tiny because nearly every point gets confidence $\approx0.998$: entropy $\approx0.02$ nats vs.\ a maximum of $\ln 2 = 0.693$.
+MI at $k=10$: DE 0.0003 vs.\ MC 0.0046, so DE members are nearly identical on the test points.}
+
+\begin{figure}[htbp]
+  \centering
+  \methodpair{two_moons}{size_sweep.png}
+  \caption{Two moons metrics vs.\ number of members; error bars are $\pm1$ sd over $k$-member subsets. Note the very small y-axis ranges.}
+  \label{fig:tm-size}
 \end{figure}
 
-\section{Realistic high-dimensional dataset}
-Report the same train/test metrics and uncertainty summaries on Fashion-MNIST (or justify a replacement). Include a table comparing standard deep ensembles and MC dropout at matched compute and an ensemble-size plot. Analyze uncertain correct and incorrect examples and whether uncertainty identifies likely mistakes. Do not claim calibration from a single mean uncertainty number.
+\subsubsection{Uncertainty surfaces}
+\plan{Both draw the same boundary through the data.
+MI near data vs.\ away from it: DE 0.003 vs.\ 0.038 ($12\times$), MC 0.022 vs.\ 0.053 ($2.4\times$).
+The DE's uncertainty is concentrated away from the data; MC dropout's is spread everywhere, including on the data.
+Optional sentence on reliability (not shown): 97\% of test points have confidence above 0.93; both methods are slightly underconfident (ECE $<0.01$).}
 
-\section{Comparison and discussion}
-Directly compare methods on accuracy/error, uncertainty behavior, compute/memory, and sensitivity to ensemble size or MC sample count. Explain limitations: finite seeds, dataset scope, hyperparameter sensitivity, and the difference between in-distribution ambiguity and out-of-distribution uncertainty. Mention unexpected results and plausible explanations.
+\begin{figure}[htbp]
+  \centering
+  \methodpair{two_moons}{surface.png}
+  \caption{Two moons: predictive probability (left of each pair) and mutual information (right) over the input plane. \plan{Describe where each method is uncertain.}}
+  \label{fig:tm-surface}
+\end{figure}
+
+\subsubsection{Function space}
+\plan{MC dropout spreads more and disagrees more (0.5\% vs.\ 0.1\%), but 0.001 is one test point: DE pairs disagree on 0--4 points, MC pairs on 2--7.
+Only 4 test points ever change class under any DE member, all on the boundary (averaged confidence $\approx0.55$); each dropout pass shifts the boundary slightly, so 14 boundary points change class in at least one pass.
+Don't read structure into the DE heatmap; the differences are 1--3 points.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{two_moons/figures/function_space.png}
+  \caption{Two moons function space: members of both methods in one PCA of their test predictions (left) and pairwise top-1 disagreement (right).}
+  \label{fig:tm-function}
+\end{figure}
+
+\FloatBarrier
+\subsection{Fashion-MNIST}
+
+\subsubsection{Training curves}
+\plan{DE 90.1\% vs.\ MC 88.7\% test accuracy; test NLL 0.276 vs.\ 0.318.
+Gain over the member mean: DE up to +1.46\% (final +1.18\%), MC +0.47\%.
+Member spread is larger for the DE in NLL (sd 0.0067 vs.\ 0.0018) but similar in accuracy; the bands mean different things (10 networks vs.\ 10 passes of one).
+Train--test accuracy gap: DE 4.3 points, MC 3.6 points (dropout regularizes).}
+
+\begin{figure}[htbp]
+  \centering
+  \methodpair{fashion_mnist}{training_curves.png}
+  \caption{Fashion-MNIST training curves: member mean $\pm1$ sd and the averaged prediction, on train and test.}
+  \label{fig:fmnist-training}
+\end{figure}
+
+\subsubsection{Ensemble size}
+\plan{Every metric improves with $k$, more for the DE (error 11.1\%$\to$9.9\% vs.\ 11.8\%$\to$11.3\%; ECE 0.025$\to$0.008 vs.\ 0.029$\to$0.018; MI 0.035 vs.\ 0.016 at $k=10$); most of the gain comes by $k=5$.
+Context: uniform-guess NLL and maximum entropy are $\ln 10 = 2.30$; MI is about 13\% of predictive entropy for the DE.
+Train ECE rises with $k$ while test ECE falls: averaging lowers confidence, which fixes overconfident test predictions but makes already slightly underconfident train predictions more so.}
+
+\begin{figure}[htbp]
+  \centering
+  \methodpair{fashion_mnist}{size_sweep.png}
+  \caption{Fashion-MNIST metrics vs.\ number of members; error bars are $\pm1$ sd over $k$-member subsets.}
+  \label{fig:fmnist-size}
+\end{figure}
+
+\subsubsection{Reliability}
+\plan{Single members of both methods are overconfident (mean confidence $-$ accuracy: DE +2.6, MC +2.9 points).
+The DE ensemble ends almost exactly calibrated ($-0.06$ points, ECE $-69\%$); MC dropout stays overconfident (+1.7 points, ECE $-38\%$).
+Averaging lowers confidence most where members disagree, which is where errors concentrate.}
+
+\begin{figure}[htbp]
+  \centering
+  \methodpair{fashion_mnist}{reliability.png}
+  \caption{Fashion-MNIST test reliability: single member vs.\ full ensemble. Points below the diagonal are overconfident; the histogram shows each bin's share of inputs.}
+  \label{fig:fmnist-reliability}
+\end{figure}
+
+\subsubsection{Function space}
+\plan{DE members spread widely; the 10 MC passes almost coincide.
+Mean disagreement DE 7.1\% vs.\ MC 4.4\%, matching the MI gap.
+PC1 mostly separates the methods (they trained different networks); diversity is the spread within each group.
+Contrast with two moons (Fig.~\ref{fig:tm-function}), where the order is reversed.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{fashion_mnist/figures/function_space.png}
+  \caption{Fashion-MNIST function space: members of both methods in one PCA of their test predictions (left) and pairwise top-1 disagreement (right).}
+  \label{fig:fmnist-function}
+\end{figure}
+
+\FloatBarrier
+\section{Discussion}
+\plan{Where diversity comes from: random initialization sends DE members to different solutions on both datasets; what matters is whether the test inputs force them to agree.
+On two moons (2-D, test points on the training data) every solution draws the same boundary; on Fashion-MNIST (784-D, ambiguous images) they differ.
+MC dropout samples around one solution on both datasets (Fort et al., 2019).}
+
+\plan{The same averaging fixes calibration on test and worsens it on train.}
+
+\plan{Cost: the DE trains 10 networks; MC dropout trains one and pays only at test time.}
+
+\plan{Limitations: one training seed per configuration; dropout rate 0.1 not tuned; MLPs only; no out-of-distribution or dataset-shift evaluation.}
 
 \section{Conclusion}
-Give two or three concise takeaways about which method is more useful for each goal, backed by the results.
+\plan{Both methods improve on a single network, and the improvement grows with $k$.
+The DE improves more on accuracy, NLL and especially calibration, because its members differ more ($2\times$ MI, $1.6\times$ disagreement).
+In-distribution diversity depends on whether the data leaves room for it; on two moons it does not.}
+
 \end{document}
