@@ -61,8 +61,8 @@ Masks use a fixed seed, so results are reproducible.}
 All metrics except the entropy decomposition and disagreement are computed on $\bar p$.
 \begin{itemize}
   \item \textbf{Error rate}: fraction of inputs where $\arg\max_c \bar p(c \mid x) \ne y$.
-  \item \textbf{Negative log-likelihood} (nats): $\mathrm{NLL} = -\frac{1}{N}\sum_{n} \ln \bar p(y_n \mid x_n)$.
-  \item \textbf{Expected calibration error}: with confidence $\max_c \bar p(c \mid x)$ split into $B=15$ equal-width bins,
+  \item \textbf{Negative log-likelihood (NLL)} (nats): $\mathrm{NLL} = -\frac{1}{N}\sum_{n} \ln \bar p(y_n \mid x_n)$.
+  \item \textbf{Expected calibration error (ECE)}: with confidence $\max_c \bar p(c \mid x)$ split into $B=15$ equal-width bins,
     $\mathrm{ECE} = \sum_{b} \frac{n_b}{N}\,\lvert \mathrm{acc}(b) - \mathrm{conf}(b) \rvert$, shown in full by reliability diagrams.
   \item \textbf{Entropy decomposition}: predictive entropy (total) splits into expected entropy (aleatoric) and mutual information (epistemic),
     \begin{equation}
@@ -83,8 +83,18 @@ Figures show the deep ensemble (a) and MC dropout (b) side by side; each panel h
 \subsection{Two moons}
 
 \subsubsection{Training curves}
-\plan{Both converge by about epoch 75 (99.4\% test accuracy); test NLL keeps falling slowly to epoch 200 with no overfitting.
-Ensemble and member-mean curves overlap from about epoch 10: the final gain from ensembling is $-0.04\%$ (DE) and $+0.07\%$ (MC), i.e.\ nothing.}
+
+Both the Deep Ensemble and MC Dropout methods are trained on the two moons dataset, and their training and testing curves (including NLL and accuracy) are shown in Figure~\ref{fig:tm-training}. 
+
+We observe that they both converge by epoch 75, achieving a test accuracy of 99.3\%. 
+Their test NLL continues to decrease through training, reaching about 0.013 (DE) and 0.015 (MC Dropout) at epoch 200.
+We note that the training and testing accuracies both remain close, without any meaningful loss in test accuracy later in training.
+A similar observation is true for the NLL, which continues to decrease on the test set without any sustained increase.
+Thus, we conclude that there is no evidence of overfitting in either method. 
+The final gain from ensembling 10 members is negligible; the Deep Ensemble method has a final gain of $-0.04\%$ percentage points, and the MC Dropout method has a final gain of $+0.07\%$ percentage points.
+
+The ensemble and member-mean curves become very similar after the early training phase (about epoch 10), which is consistent with the negligible final gain from averaging on this simple dataset. 
+Member diversity is examined more directly using mutual information and pairwise disagreement in Section~\ref{sec:tm-size} and Section~\ref{sec:tm-function}, respectively.
 
 \begin{figure}[htbp]
   \centering
@@ -93,10 +103,24 @@ Ensemble and member-mean curves overlap from about epoch 10: the final gain from
   \label{fig:tm-training}
 \end{figure}
 
-\subsubsection{Ensemble size}
+\subsubsection{Ensemble size}\label{sec:tm-size}
 \plan{Flat for both methods. Test error is 0.5\% (5 of 1{,}000 points), and changes with $k$ are under one test point (e.g.\ 0.46\%$\to$0.50\%); the auto-scaled axes make noise look like trends.
 Values are tiny because nearly every point gets confidence $\approx0.998$: entropy $\approx0.02$ nats vs.\ a maximum of $\ln 2 = 0.693$.
 MI at $k=10$: DE 0.0003 vs.\ MC 0.0046, so DE members are nearly identical on the test points.}
+
+We first observe that the Deep Ensemble method does not meaningfully benefit from increasing the number of members, unlike the MC dropout method, which shows some improvement. 
+We can see this in Figure~\ref{fig:tm-size}, where the test error, NLL, ECE, and MI are plotted against the number of members $k$, where $k \in \{1,2,5,10\}$.
+The Deep Ensemble method has basically flat curves for all metrics, with some small fluctuations (Figure~\ref{fig:tm-size}a).
+This means that the Deep Ensemble method does not benefit from increasing the number of members, and that the members are nearly identical on the test points.
+The mutual information curve does increase, but only by 0.0003 nats, so it is negligible. 
+
+MC dropout shows some improvement in training error and NLL as \(k\) increases, while its test error remains essentially constant at approximately \(0.5\%\). 
+Test NLL decreases slightly from \(0.0174\) for one member to \(0.0151\) for ten members. 
+In contrast, test ECE increases a little, indicating slightly worse calibration after averaging in this setting; this small change is not enough to be considered evidence of overfitting. 
+Mutual information increases to \(0.0046\) nats at \(k=10\), substantially above the deep ensemble's \(0.0003\) nats, indicating greater diversity among MC-dropout predictions.
+
+We note that all aforementioned effects are very small because the one member predictions are already capable of solving this simple task. 
+ 
 
 \begin{figure}[htbp]
   \centering
@@ -105,7 +129,7 @@ MI at $k=10$: DE 0.0003 vs.\ MC 0.0046, so DE members are nearly identical on th
   \label{fig:tm-size}
 \end{figure}
 
-\subsubsection{Uncertainty surfaces}
+\subsubsection{Uncertainty surfaces}\label{sec:tm-surface}
 \plan{Both draw the same boundary through the data.
 MI near data vs.\ away from it: DE 0.003 vs.\ 0.038 ($12\times$), MC 0.022 vs.\ 0.053 ($2.4\times$).
 The DE's uncertainty is concentrated away from the data; MC dropout's is spread everywhere, including on the data.
@@ -118,7 +142,7 @@ Optional sentence on reliability (not shown): 97\% of test points have confidenc
   \label{fig:tm-surface}
 \end{figure}
 
-\subsubsection{Function space}
+\subsubsection{Function space}\label{sec:tm-function}
 \plan{MC dropout spreads more and disagrees more (0.5\% vs.\ 0.1\%), but 0.001 is one test point: DE pairs disagree on 0--4 points, MC pairs on 2--7.
 Only 4 test points ever change class under any DE member, all on the boundary (averaged confidence $\approx0.55$); each dropout pass shifts the boundary slightly, so 14 boundary points change class in at least one pass.
 Don't read structure into the DE heatmap; the differences are 1--3 points.}
