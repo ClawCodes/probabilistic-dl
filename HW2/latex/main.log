@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2026.1.22)  28 OCT 2026 10:55
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2026.1.22)  28 OCT 2026 12:16
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -345,112 +345,103 @@ File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 LaTeX Font Info:    Trying to load font information for U+msb on input line 24.
  (c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
-)
+) [1
 
-LaTeX Warning: Reference `eq:loss' on page 1 undefined on input line 56.
-
-[1
-
-{c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]
-<figs/two_moons/ensemble/figures/training_curves.png, id=110, 730.73pt x 456.104pt>
+{c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-var/fonts/map/pdftex/updmap/pdftex.map}] [2]
+<figs/two_moons/ensemble/figures/training_curves.png, id=126, 730.73pt x 456.104pt>
 File: figs/two_moons/ensemble/figures/training_curves.png Graphic file (type png)
 <use figs/two_moons/ensemble/figures/training_curves.png>
-Package pdftex.def Info: figs/two_moons/ensemble/figures/training_curves.png  used on input line 122.
+Package pdftex.def Info: figs/two_moons/ensemble/figures/training_curves.png  used on input line 150.
 (pdftex.def)             Requested size: 246.83554pt x 154.06416pt.
-<figs/two_moons/mc_dropout/figures/training_curves.png, id=112, 730.73pt x 456.104pt>
+<figs/two_moons/mc_dropout/figures/training_curves.png, id=128, 730.73pt x 456.104pt>
 File: figs/two_moons/mc_dropout/figures/training_curves.png Graphic file (type png)
 <use figs/two_moons/mc_dropout/figures/training_curves.png>
-Package pdftex.def Info: figs/two_moons/mc_dropout/figures/training_curves.png  used on input line 122.
+Package pdftex.def Info: figs/two_moons/mc_dropout/figures/training_curves.png  used on input line 150.
 (pdftex.def)             Requested size: 246.83554pt x 154.06416pt.
- [2]
-<figs/two_moons/ensemble/figures/size_sweep.png, id=125, 803.0pt x 456.104pt>
+<figs/two_moons/ensemble/figures/size_sweep.png, id=131, 803.0pt x 456.104pt>
 File: figs/two_moons/ensemble/figures/size_sweep.png Graphic file (type png)
 <use figs/two_moons/ensemble/figures/size_sweep.png>
-Package pdftex.def Info: figs/two_moons/ensemble/figures/size_sweep.png  used on input line 147.
+Package pdftex.def Info: figs/two_moons/ensemble/figures/size_sweep.png  used on input line 175.
 (pdftex.def)             Requested size: 246.83554pt x 140.20068pt.
-<figs/two_moons/mc_dropout/figures/size_sweep.png, id=126, 803.0pt x 456.104pt>
+<figs/two_moons/mc_dropout/figures/size_sweep.png, id=132, 803.0pt x 456.104pt>
 File: figs/two_moons/mc_dropout/figures/size_sweep.png Graphic file (type png)
 <use figs/two_moons/mc_dropout/figures/size_sweep.png>
-Package pdftex.def Info: figs/two_moons/mc_dropout/figures/size_sweep.png  used on input line 147.
+Package pdftex.def Info: figs/two_moons/mc_dropout/figures/size_sweep.png  used on input line 175.
 (pdftex.def)             Requested size: 246.83554pt x 140.20068pt.
-<figs/two_moons/ensemble/figures/surface.png, id=128, 730.73pt x 297.11pt>
+ [3 <./figs/two_moons/ensemble/figures/training_curves.png> <./figs/two_moons/mc_dropout/figures/training_curves.png>]
+<figs/two_moons/ensemble/figures/surface.png, id=142, 730.73pt x 297.11pt>
 File: figs/two_moons/ensemble/figures/surface.png Graphic file (type png)
 <use figs/two_moons/ensemble/figures/surface.png>
-Package pdftex.def Info: figs/two_moons/ensemble/figures/surface.png  used on input line 161.
+Package pdftex.def Info: figs/two_moons/ensemble/figures/surface.png  used on input line 189.
 (pdftex.def)             Requested size: 246.83554pt x 100.35869pt.
-<figs/two_moons/mc_dropout/figures/surface.png, id=129, 730.73pt x 297.11pt>
+<figs/two_moons/mc_dropout/figures/surface.png, id=143, 730.73pt x 297.11pt>
 File: figs/two_moons/mc_dropout/figures/surface.png Graphic file (type png)
 <use figs/two_moons/mc_dropout/figures/surface.png>
-Package pdftex.def Info: figs/two_moons/mc_dropout/figures/surface.png  used on input line 161.
+Package pdftex.def Info: figs/two_moons/mc_dropout/figures/surface.png  used on input line 189.
 (pdftex.def)             Requested size: 246.83554pt x 100.35869pt.
- [3 <./figs/two_moons/ensemble/figures/training_curves.png> <./figs/two_moons/mc_dropout/figures/training_curves.png>] [4 <./figs/two_moons/ensemble/figures/size_sweep.png> <./figs/two_moons/mc_dropout/figures/size_sweep.png> <./figs/two_moons/ensemble/figures/surface.png> <./figs/two_moons/mc_dropout/figures/surface.png>]
-<figs/two_moons/figures/function_space.png, id=149, 831.908pt x 311.564pt>
+<figs/two_moons/figures/function_space.png, id=145, 831.908pt x 311.564pt>
 File: figs/two_moons/figures/function_space.png Graphic file (type png)
 <use figs/two_moons/figures/function_space.png>
-Package pdftex.def Info: figs/two_moons/figures/function_space.png  used on input line 182.
+Package pdftex.def Info: figs/two_moons/figures/function_space.png  used on input line 210.
 (pdftex.def)             Requested size: 498.66258pt x 186.76392pt.
-<figs/fashion_mnist/ensemble/figures/training_curves.png, id=150, 730.73pt x 456.104pt>
+ [4 <./figs/two_moons/ensemble/figures/size_sweep.png> <./figs/two_moons/mc_dropout/figures/size_sweep.png> <./figs/two_moons/ensemble/figures/surface.png> <./figs/two_moons/mc_dropout/figures/surface.png>]
+<figs/fashion_mnist/ensemble/figures/training_curves.png, id=156, 730.73pt x 456.104pt>
 File: figs/fashion_mnist/ensemble/figures/training_curves.png Graphic file (type png)
 <use figs/fashion_mnist/ensemble/figures/training_curves.png>
-Package pdftex.def Info: figs/fashion_mnist/ensemble/figures/training_curves.png  used on input line 200.
+Package pdftex.def Info: figs/fashion_mnist/ensemble/figures/training_curves.png  used on input line 228.
 (pdftex.def)             Requested size: 246.83554pt x 154.06416pt.
-<figs/fashion_mnist/mc_dropout/figures/training_curves.png, id=151, 730.73pt x 456.104pt>
+<figs/fashion_mnist/mc_dropout/figures/training_curves.png, id=157, 730.73pt x 456.104pt>
 File: figs/fashion_mnist/mc_dropout/figures/training_curves.png Graphic file (type png)
 <use figs/fashion_mnist/mc_dropout/figures/training_curves.png>
-Package pdftex.def Info: figs/fashion_mnist/mc_dropout/figures/training_curves.png  used on input line 200.
+Package pdftex.def Info: figs/fashion_mnist/mc_dropout/figures/training_curves.png  used on input line 228.
 (pdftex.def)             Requested size: 246.83554pt x 154.06416pt.
- [5 <./figs/two_moons/figures/function_space.png> <./figs/fashion_mnist/ensemble/figures/training_curves.png> <./figs/fashion_mnist/mc_dropout/figures/training_curves.png>]
-<figs/fashion_mnist/ensemble/figures/size_sweep.png, id=160, 803.0pt x 456.104pt>
+<figs/fashion_mnist/ensemble/figures/size_sweep.png, id=158, 803.0pt x 456.104pt>
 File: figs/fashion_mnist/ensemble/figures/size_sweep.png Graphic file (type png)
 <use figs/fashion_mnist/ensemble/figures/size_sweep.png>
-Package pdftex.def Info: figs/fashion_mnist/ensemble/figures/size_sweep.png  used on input line 212.
+Package pdftex.def Info: figs/fashion_mnist/ensemble/figures/size_sweep.png  used on input line 240.
 (pdftex.def)             Requested size: 246.83554pt x 140.20068pt.
-<figs/fashion_mnist/mc_dropout/figures/size_sweep.png, id=161, 803.0pt x 456.104pt>
+<figs/fashion_mnist/mc_dropout/figures/size_sweep.png, id=159, 803.0pt x 456.104pt>
 File: figs/fashion_mnist/mc_dropout/figures/size_sweep.png Graphic file (type png)
 <use figs/fashion_mnist/mc_dropout/figures/size_sweep.png>
-Package pdftex.def Info: figs/fashion_mnist/mc_dropout/figures/size_sweep.png  used on input line 212.
+Package pdftex.def Info: figs/fashion_mnist/mc_dropout/figures/size_sweep.png  used on input line 240.
 (pdftex.def)             Requested size: 246.83554pt x 140.20068pt.
-<figs/fashion_mnist/ensemble/figures/reliability.png, id=162, 383.834pt x 441.65pt>
+ [5 <./figs/two_moons/figures/function_space.png> <./figs/fashion_mnist/ensemble/figures/training_curves.png> <./figs/fashion_mnist/mc_dropout/figures/training_curves.png>]
+<figs/fashion_mnist/ensemble/figures/reliability.png, id=168, 383.834pt x 441.65pt>
 File: figs/fashion_mnist/ensemble/figures/reliability.png Graphic file (type png)
 <use figs/fashion_mnist/ensemble/figures/reliability.png>
-Package pdftex.def Info: figs/fashion_mnist/ensemble/figures/reliability.png  used on input line 224.
+Package pdftex.def Info: figs/fashion_mnist/ensemble/figures/reliability.png  used on input line 252.
 (pdftex.def)             Requested size: 246.83554pt x 284.01631pt.
-<figs/fashion_mnist/mc_dropout/figures/reliability.png, id=163, 383.834pt x 441.65pt>
+<figs/fashion_mnist/mc_dropout/figures/reliability.png, id=169, 383.834pt x 441.65pt>
 File: figs/fashion_mnist/mc_dropout/figures/reliability.png Graphic file (type png)
 <use figs/fashion_mnist/mc_dropout/figures/reliability.png>
-Package pdftex.def Info: figs/fashion_mnist/mc_dropout/figures/reliability.png  used on input line 224.
+Package pdftex.def Info: figs/fashion_mnist/mc_dropout/figures/reliability.png  used on input line 252.
 (pdftex.def)             Requested size: 246.83554pt x 284.01631pt.
- [6 <./figs/fashion_mnist/ensemble/figures/size_sweep.png> <./figs/fashion_mnist/mc_dropout/figures/size_sweep.png> <./figs/fashion_mnist/ensemble/figures/reliability.png> <./figs/fashion_mnist/mc_dropout/figures/reliability.png>]
-<figs/fashion_mnist/figures/function_space.png, id=175, 831.908pt x 311.1625pt>
+<figs/fashion_mnist/figures/function_space.png, id=171, 831.908pt x 311.1625pt>
 File: figs/fashion_mnist/figures/function_space.png Graphic file (type png)
 <use figs/fashion_mnist/figures/function_space.png>
-Package pdftex.def Info: figs/fashion_mnist/figures/function_space.png  used on input line 237.
+Package pdftex.def Info: figs/fashion_mnist/figures/function_space.png  used on input line 265.
 (pdftex.def)             Requested size: 498.66258pt x 186.52327pt.
- [7 <./figs/fashion_mnist/figures/function_space.png>] (./main.aux)
+ [6 <./figs/fashion_mnist/ensemble/figures/size_sweep.png> <./figs/fashion_mnist/mc_dropout/figures/size_sweep.png> <./figs/fashion_mnist/ensemble/figures/reliability.png> <./figs/fashion_mnist/mc_dropout/figures/reliability.png>] [7 <./figs/fashion_mnist/figures/function_space.png>] (./main.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-01-19>
  ***********
-
-
-LaTeX Warning: There were undefined references.
-
 Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: 253EB79DC67834D855B143A723500A0B;2659.
  ) 
 Here is how much of TeX's memory you used:
- 10590 strings out of 469514
- 167342 string characters out of 5468199
- 589018 words of memory out of 5000000
+ 10591 strings out of 469514
+ 167352 string characters out of 5468199
+ 589060 words of memory out of 5000000
  39082 multiletter control sequences out of 15000+600000
  636732 words of font info for 75 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  75i,9n,79p,363b,475s stack positions out of 10000i,1000n,20000p,200000b,200000s
  <c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1000.600pk><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi5.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb><c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb>
-Output written on main.pdf (7 pages, 2216742 bytes).
+Output written on main.pdf (7 pages, 2221413 bytes).
 PDF statistics:
- 263 PDF objects out of 1000 (max. 8388607)
- 193 compressed objects within 2 object streams
- 39 named destinations out of 1000 (max. 500000)
+ 268 PDF objects out of 1000 (max. 8388607)
+ 198 compressed objects within 2 object streams
+ 40 named destinations out of 1000 (max. 500000)
  239 words of extra memory for PDF output out of 10000 (max. 10000000)
 

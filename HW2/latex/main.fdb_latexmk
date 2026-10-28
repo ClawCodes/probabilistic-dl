@@ -1,5 +1,5 @@
 # Fdb version 4
-["pdflatex"] 1793206217.97803 "c:/Users/nicla/OneDrive/Documents/Classes/Prob DL/HW2/latex/main.tex" "main.pdf" "main" 1793206222.74782 0
+["pdflatex"] 1793211389.52754 "c:/Users/nicla/OneDrive/Documents/Classes/Prob DL/HW2/latex/main.tex" "main.pdf" "main" 1793211394.61729 0
   "c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/tfm/jknappen/ec/tcrm1000.tfm" 1767910029 1536 e07581a4bb3136ece9eeb4c3ffab8233 ""
   "c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm" 1767910029 1004 54797486969f23fa377b128694d548df ""
   "c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex8.tfm" 1767910029 988 bdf658c3bfc2d96d3c8b02cfc1c94c20 ""
@@ -96,7 +96,7 @@
   "c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1000.600pk" 1790366289 11524 ba170e4ef07c4fe1f69ec76e476ff673 ""
   "c:/Users/nicla/AppData/Roaming/TinyTeX/texmf-var/web2c/pdftex/pdflatex.fmt" 1769115500 2236246 b352b7201975cd77ff72819b4c9dda91 ""
   "c:/Users/nicla/AppData/Roaming/TinyTeX/texmf.cnf" 1767910053 956 b1b02114e0ad806b8e5e4bf93f21abb8 ""
-  "c:/Users/nicla/OneDrive/Documents/Classes/Prob DL/HW2/latex/main.tex" 1793206217 16268 dbca7ac2668d3fe432625becc106f4d4 ""
+  "c:/Users/nicla/OneDrive/Documents/Classes/Prob DL/HW2/latex/main.tex" 1793211383 18553 5ffb62eac692efc65c2302d62d9f3558 ""
   "figs/fashion_mnist/ensemble/figures/reliability.png" 1793044979 83240 936938c90fcea27befed92ed51f43972 ""
   "figs/fashion_mnist/ensemble/figures/size_sweep.png" 1793044979 166969 78a573e288b0e988febf45335731615d ""
   "figs/fashion_mnist/ensemble/figures/training_curves.png" 1793044979 183438 c81fd792e2b99b925d1d6b5a216575e2 ""
@@ -111,9 +111,9 @@
   "figs/two_moons/mc_dropout/figures/size_sweep.png" 1793044979 148800 d592b11a32ce8a11a9972f7d49803d34 ""
   "figs/two_moons/mc_dropout/figures/surface.png" 1793044979 562207 d2c8b61ffa330b4da468d34b71d3af16 ""
   "figs/two_moons/mc_dropout/figures/training_curves.png" 1793044979 132863 f7cb3c715671fe760e12a3e35daa5eb9 ""
-  "main.aux" 1793206222 6218 d6d1cea155b950ec164b959e33bce3e3 "pdflatex"
-  "main.out" 1793206222 2659 253eb79dc67834d855b143a723500a0b "pdflatex"
-  "main.tex" 1793206217 16268 dbca7ac2668d3fe432625becc106f4d4 ""
+  "main.aux" 1793211394 6279 e462c0c93b9ffe78614c2faac5047784 "pdflatex"
+  "main.out" 1793211394 2659 253eb79dc67834d855b143a723500a0b "pdflatex"
+  "main.tex" 1793211383 18553 5ffb62eac692efc65c2302d62d9f3558 ""
   (generated)
   "main.aux"
   "main.log"

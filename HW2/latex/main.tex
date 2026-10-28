@@ -38,7 +38,7 @@ For each method we examine the full ensemble and its individual members with res
 We use two separate datasets for training and evaluation.
 First, a sample of the two moons dataset with $500$ train and $1000$ test data points.
 This dataset will serve as our simple example that can be easily visualized.
-Second, fashion-MNIST, a set of $28x28$ grayscale images with 10 associated classes: T-shirt, Trouser, Pullover, Dress, Coat, Sandal, Shirt, Sneaker, Bag, and Ankle Boot.
+Second, fashion-MNIST, a set of $28\text{x}28$ grayscale images with 10 associated classes: T-shirt, Trouser, Pullover, Dress, Coat, Sandal, Shirt, Sneaker, Bag, and Ankle Boot.
 This dataset is split into $60,000$ train and $10,000$ test data points.
 This dataset serves as our realistic dataset and provides stronger aleatoric uncertainty to investigate how ensembles may learn when there is likely higher disagreement between members.
 
@@ -50,10 +50,20 @@ Both methods use the same network: a multilayer perceptron with two hidden layer
   \text{Linear}(64 \times 64) \to \text{ReLU} \to \text{Dropout} \to
   \text{Linear}(64 \times C),
 \]
-where $d$ is the input dimension ($2$ for two moons, $784$ for Fashion-MNIST when flattened)) and $C$ is the number of classes.
+where $d$ is the input dimension ($2$ for two moons, $784$ for Fashion-MNIST when flattened) and $C$ is the number of classes.
 The dropout rate is $0$ for the deep ensemble and $0.1$ for MC dropout, so the two methods differ only in dropout and in how the ensemble members are produced.
 Deep-ensemble members differ only in their random seed, which sets both the weight initialization and the order of the training data; for MC dropout, each member is a test-time forward pass with a different dropout mask.
+\begin{equation}
+  \mathcal{L}(\theta)
+  = -\frac{1}{|\mathcal{B}|}\sum_{(x_i,y_i)\in\mathcal{B}}
+      \log p_\theta(y_i\mid x_i)
+    + \frac{\lambda}{2}\lVert\theta\rVert_2^2,
+  \qquad \lambda=10^{-4},
+  \label{eq:loss}
+\end{equation}
 All networks are trained by minimizing the loss in Eq.~\eqref{eq:loss}, the negative log-likelihood with an L2 penalty of $\lambda = 10^{-4}$, using Adam with a learning rate of $10^{-3}$.
+where $p_\theta(y_i\mid x_i)$ is the softmax probability assigned to the
+correct class.
 We train for 200 epochs with a batch size of 128 on two moons, and for 20 epochs with a batch size of 256 on Fashion-MNIST.
 
 \subsection{Standard deep ensembles}
@@ -64,17 +74,22 @@ The ensemble prediction averages the members' predicted probabilities,
   \label{eq:average}
 \end{equation}
 an empirical approximation of the predictive distribution $p(y \mid x, \mathcal D)$.
-
-For our implementation, we use $M=10$ networks, where each member $m$ is seeded with \texttt{seed}$+m$ to ensure different initializations. 
+Our implementation uses $M=10$ networks, where each member $m$ is seeded with \texttt{seed}$+m$ to ensure different initializations. 
 No dropout is used in this method, because that is the comparison method we are evaluating against. 
 Each member is trained on the same full training set, and the final ensemble prediction is the average of the 10 members' predictions, see Eq.~\eqref{eq:average}.
+For a mini-batch $\mathcal{B}$, the training objective is
 
 
 
 \subsection{MC dropout}
-\plan{One network with dropout $p=0.1$ after each hidden layer, trained with the same objective (approximate variational inference, Gal \& Ghahramani).
-Dropout stays on at test time; $T=10$ stochastic passes are each treated as a member and averaged as in Eq.~\eqref{eq:average}.
-Masks use a fixed seed, so results are reproducible.}
+
+The MC dropout method trains a single network with dropout probability $p=0.1$ after each hidden ReLU activation layer. 
+We keep the dropout active during test time, so that each random new mask counts as a different member of the ensemble.
+Thus, each pass shares the same weights, learned through training, and only differ in their hidden-unit activations. 
+For evaluation, we use $T=10$ stochastic forward passes to compute the average prediction $\bar p$ as in Eq.~\eqref{eq:average}.
+We use a fixed seed for the sequence of dropout masks during testing, so that evaluation is reproducible. 
+
+
 
 \subsection{Evaluation metrics}
 
@@ -93,10 +108,23 @@ We use the following metrics to evaluate the performance of the models:
   \item \textbf{Pairwise disagreement}: fraction of test inputs on which two members predict a different class; a PCA of each member's test predictions (\emph{function space}) shows the same diversity visually.
 \end{itemize}
 
+
 \subsection{Ensemble-size protocol}
-\plan{Train $M=10$ once; evaluate subsets of size $k \in \{1,2,5,10\}$ (every subset when there are at most 20, else 20 random ones).
-Error bars are $\pm1$ sd over subsets; they shrink at large $k$ partly because subsets overlap, and $k=10$ is a single subset.
-The test set is used for evaluation only, never for model selection.}
+
+For each method, we train or sample a total of \(M=10\) members once (depending on the method), then evaluate ensembles of size \(k\in\{1,2,5,10\}\) by averaging the probabilities of selected members according to Eq.~\eqref{eq:average}.
+Thus, smaller ensembles are evaluated from the same pool
+of trained networks (deep ensemble) or stochastic test-time passes (MC dropout). 
+This allows us to not retrain the models for each ensemble size.
+
+For \(k=1\), we evaluate all 10 individual members. For other ensemble sizes, we evaluate every possible \(k\)-member subset when there are at most 20 such
+subsets.
+Otherwise, we evaluate 20 randomly drawn subsets using a fixed seed.
+Thus, \(k=10\) has one subset, while the estimates for \(k=2\) and \(k=5\) summarize 20 subsets. 
+Plotted values in Figures~\ref{fig:tm-size} and~\ref{fig:fmnist-size} are the mean across subsets, and error bars show \(\pm1\) population standard deviation. 
+Because subsets overlap, especially for large \(k\), these error bars describe variation among subsets
+rather than independent confidence intervals ($K=10$ is a single point, so its error bar should not be interpreted as a confidence interval).
+The test set is used only for evaluation and not for model selection.
+
 
 \section{Evaluation}
 Figures show the deep ensemble (a) and MC dropout (b) side by side; each panel has its own y-axis range, so compare values rather than curve heights.
