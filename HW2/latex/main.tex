@@ -34,13 +34,27 @@ For each method we examine the full ensemble and its individual members with res
 \section{Setup}
 
 \subsection{Data}
-\plan{Two moons: 500 train / 1{,}000 test points, noise 0.12; 2-D, so predictions can be plotted over the whole input plane.
-Fashion-MNIST: 60{,}000 train / 10{,}000 test $28\times28$ grayscale images, 10 classes; several classes look alike (shirt, T-shirt, pullover, coat), which gives real aleatoric uncertainty.}
+
+We use two separate datasets for training and evaluation.
+First, a sample of the two moons dataset with $500$ train and $1000$ test data points.
+This dataset will serve as our simple example that can be easily visualized.
+Second, fashion-MNIST, a set of $28x28$ grayscale images with 10 associated classes: T-shirt, Trouser, Pullover, Dress, Coat, Sandal, Shirt, Sneaker, Bag, and Ankle Boot.
+This dataset is split into $60,000$ train and $10,000$ test data points.
+This dataset serves as our realistic dataset and provides stronger aleatoric uncertainty to investigate how ensembles may learn when there is likely higher disagreement between members.
 
 \subsection{Model and training}
-\plan{Both methods use the same MLP (Flatten, two hidden ReLU layers of width 64 for two moons / 256 for Fashion-MNIST, linear output), Adam with learning rate $10^{-3}$, and 200 / 20 epochs with batch size 128 / 256.
-State the L2 term: weight decay $10^{-4}$, equivalent to a zero-mean isotropic Gaussian prior on the weights.
-The only differences between the methods are dropout and how members are produced.}
+
+Both methods use the same network: a multilayer perceptron with two hidden layers of 64 units,
+\[
+  \text{Linear}(d \times 64) \to \text{ReLU} \to \text{Dropout} \to
+  \text{Linear}(64 \times 64) \to \text{ReLU} \to \text{Dropout} \to
+  \text{Linear}(64 \times C),
+\]
+where $d$ is the input dimension ($2$ for two moons, $784$ for Fashion-MNIST when flattened)) and $C$ is the number of classes.
+The dropout rate is $0$ for the deep ensemble and $0.1$ for MC dropout, so the two methods differ only in dropout and in how the ensemble members are produced.
+Deep-ensemble members differ only in their random seed, which sets both the weight initialization and the order of the training data; for MC dropout, each member is a test-time forward pass with a different dropout mask.
+All networks are trained by minimizing the loss in Eq.~\eqref{eq:loss}, the negative log-likelihood with an L2 penalty of $\lambda = 10^{-4}$, using Adam with a learning rate of $10^{-3}$.
+We train for 200 epochs with a batch size of 128 on two moons, and for 20 epochs with a batch size of 256 on Fashion-MNIST.
 
 \subsection{Standard deep ensembles}
 \plan{$M=10$ networks, member $m$ seeded \texttt{seed}$+m$ (initialization and data order), no dropout.}
@@ -158,6 +172,8 @@ Don't read structure into the DE heatmap; the differences are 1--3 points.}
 \subsection{Fashion-MNIST}
 
 \subsubsection{Training curves}
+
+
 \plan{DE 90.1\% vs.\ MC 88.7\% test accuracy; test NLL 0.276 vs.\ 0.318.
 Gain over the member mean: DE up to +1.46\% (final +1.18\%), MC +0.47\%.
 Member spread is larger for the DE in NLL (sd 0.0067 vs.\ 0.0018) but similar in accuracy; the bands mean different things (10 networks vs.\ 10 passes of one).
