@@ -2,7 +2,7 @@
 \usepackage[letterpaper,margin=0.8in]{geometry}
 \usepackage{amsmath,amssymb,booktabs,graphicx,hyperref,xcolor,placeins}
 \graphicspath{{figs/}}
-\title{Deep Ensembles for Predictive Uncertainty}
+\title{HW \#2 - Ensembles}
 \author{Nicole Lacey \and Christopher Lawton}
 \date{}
 
@@ -53,6 +53,7 @@ Both methods use the same network: a multilayer perceptron with two hidden layer
 where $d$ is the input dimension ($2$ for two moons, $784$ for Fashion-MNIST when flattened) and $C$ is the number of classes.
 The dropout rate is $0$ for the deep ensemble and $0.1$ for MC dropout, so the two methods differ only in dropout and in how the ensemble members are produced.
 Deep-ensemble members differ only in their random seed, which sets both the weight initialization and the order of the training data; for MC dropout, each member is a test-time forward pass with a different dropout mask.
+For a mini-batch $\mathcal{B}$, the training objective is
 \begin{equation}
   \mathcal{L}(\theta)
   = -\frac{1}{|\mathcal{B}|}\sum_{(x_i,y_i)\in\mathcal{B}}
@@ -62,8 +63,7 @@ Deep-ensemble members differ only in their random seed, which sets both the weig
   \label{eq:loss}
 \end{equation}
 All networks are trained by minimizing the loss in Eq.~\eqref{eq:loss}, the negative log-likelihood with an L2 penalty of $\lambda = 10^{-4}$, using Adam with a learning rate of $10^{-3}$.
-where $p_\theta(y_i\mid x_i)$ is the softmax probability assigned to the
-correct class.
+where $p_\theta(y_i\mid x_i)$ is the softmax probability assigned to the correct class.
 We train for 200 epochs with a batch size of 128 on two moons, and for 20 epochs with a batch size of 256 on Fashion-MNIST.
 
 \subsection{Standard deep ensembles}
@@ -77,7 +77,6 @@ an empirical approximation of the predictive distribution $p(y \mid x, \mathcal 
 Our implementation uses $M=10$ networks, where each member $m$ is seeded with \texttt{seed}$+m$ to ensure different initializations. 
 No dropout is used in this method, because that is the comparison method we are evaluating against. 
 Each member is trained on the same full training set, and the final ensemble prediction is the average of the 10 members' predictions, see Eq.~\eqref{eq:average}.
-For a mini-batch $\mathcal{B}$, the training objective is
 
 
 
@@ -135,7 +134,7 @@ Figures show the deep ensemble (a) and MC dropout (b) side by side; each panel h
 
 Both the Deep Ensemble and MC Dropout methods are trained on the two moons dataset, and their training and testing curves (including NLL and accuracy) are shown in Figure~\ref{fig:tm-training}. 
 
-We observe that they both converge by epoch 75, achieving a test accuracy of 99.3\%. 
+We observe that they both converge by about epoch 75, reaching a final test accuracy of 99.5\%.
 Their test NLL continues to decrease through training, reaching about 0.013 (DE) and 0.015 (MC Dropout) at epoch 200.
 We note that the training and testing accuracies both remain close, without any meaningful loss in test accuracy later in training.
 A similar observation is true for the NLL, which continues to decrease on the test set without any sustained increase.
@@ -217,11 +216,15 @@ This aligns with our earlier conclusion that neither method benefits very much f
 
 \subsubsection{Training curves}
 
+Both methods, DE and MC Dropout, were trained on Fashion-MNIST for 20 epochs, their training and test curves are shown in Figure~\ref{fig:fmnist-training}.
+Both methods are trained to a near plateau by the end of training suggesting the models could have been trained longer, but the models did learn and we see no evidence of overfitting.
+Unlike two moons, there is a clear gap between train and test performance (91.5\% vs.\ 88.7\% accuracy for the DE and 91.0\% vs.\ 88.4\% for MC Dropout).
+Both methods reach similar final test performance with the DE slightly outperforming the MC Dropout in test accuracy (88.7\% vs. 88.4\%) and test NLL (0.318 vs.\ 0.332).
 
-\plan{DE 90.1\% vs.\ MC 88.7\% test accuracy; test NLL 0.276 vs.\ 0.318.
-Gain over the member mean: DE up to +1.46\% (final +1.18\%), MC +0.47\%.
-Member spread is larger for the DE in NLL (sd 0.0067 vs.\ 0.0018) but similar in accuracy; the bands mean different things (10 networks vs.\ 10 passes of one).
-Train--test accuracy gap: DE 4.3 points, MC 3.6 points (dropout regularizes).}
+In contrast to two moons (Figure~\ref{fig:tm-training}), in which the ensemble and member-mean curves were nearly identical after the first few epochs, here the ensembles consistently outperform their average member.
+Ensembling improves test accuracy by 1.22\% for the DE and 1.04\% for MC Dropout, and reduces NLL by 0.036 and 0.028 for DE and MC dropout respectively.
+DE also shows a wider spread amongst its members, the standard deviation of member test accuracy is 0.33 percentage points, compared to 0.15 percentage points across MC dropout passes.
+This wider gap between members reflect the epistemic uncertainty amongst members, suggesting Fashion-MNIST is serving as a more difficult evaluation benchmark when compared to two moons.
 
 \begin{figure}[htbp]
   \centering
@@ -230,10 +233,24 @@ Train--test accuracy gap: DE 4.3 points, MC 3.6 points (dropout regularizes).}
   \label{fig:fmnist-training}
 \end{figure}
 
-\subsubsection{Ensemble size}
-\plan{Every metric improves with $k$, more for the DE (error 11.1\%$\to$9.9\% vs.\ 11.8\%$\to$11.3\%; ECE 0.025$\to$0.008 vs.\ 0.029$\to$0.018; MI 0.035 vs.\ 0.016 at $k=10$); most of the gain comes by $k=5$.
-Context: uniform-guess NLL and maximum entropy are $\ln 10 = 2.30$; MI is about 13\% of predictive entropy for the DE.
-Train ECE rises with $k$ while test ECE falls: averaging lowers confidence, which fixes overconfident test predictions but makes already slightly underconfident train predictions more so.}
+\subsubsection{Ensemble size}\label{sec:fmnist-size}
+
+Figure~\ref{fig:fmnist-size} shows how each metric changes with respect to the number of members in the ensemble.
+Unlike two moons, where the metrics largely remained flat, suggesting a single member had already sufficiently solved the task, both methods appear to now benefit from ensembling.
+Test error decreases from 12.5\% to 11.3\% and 12.6\% to 11.6\% for DE and MC dropout respectively.
+Similarly, DE and MC dropout have a respective decrease in test NLL of 0.354 to 0.318 and from 0.361 to 0.332.
+For both methods we do see most of the improvement is gained by $k=5$ with a minimal improvement at  $k=10$.
+Overall the DE continues to slightly outperform MC Dropout at every ensemble size.
+
+Both predictive entropy and mutual information increase with $K$, which is expected as we anticipate more member disagreement leading to a less confident prediction.
+At $k=10$, MI reached 0.031 for the DE and 0.029 for MC dropout, far exceeding the MI observed in two moons of 0.0003 and 0.0046 for DE and MC dropout respectively.
+For both methods MI is about 8–10\% of predictive entropy suggesting most uncertainty of this task is aleatoric which is consistent with the complexity in the increase in classes and difficulty in distinguishing them.
+
+Calibration is the exception to the observed steady improvement in other metrics.
+Test ECE decreases from 0.019 (DE) and 0.012 (MC Dropout) for $k=1$ to 0.008 for both methods at $k=5$ and then slightly increases at $k=10$.
+We observe that $k=1$ members are overconfident on the test set (the mean confidence exceeds accuracy by ~1.7 and 1.0 percentage points for DE and MC dropout), whereas by $k=5$ both methods are slightly underconfident (-0.4 and -0.6) and then grow to -0.8 points for both.
+Test ECE is therefore the lowest at the point where we move from being overconfidant to underconfidant somewhere between $K=2$ and $k=5$.
+We examine calibration in more detail with the reliability diagrams in Section~\ref{sec:fmnist-reliability}.
 
 \begin{figure}[htbp]
   \centering
@@ -242,10 +259,15 @@ Train ECE rises with $k$ while test ECE falls: averaging lowers confidence, whic
   \label{fig:fmnist-size}
 \end{figure}
 
-\subsubsection{Reliability}
-\plan{Single members of both methods are overconfident (mean confidence $-$ accuracy: DE +2.6, MC +2.9 points).
-The DE ensemble ends almost exactly calibrated ($-0.06$ points, ECE $-69\%$); MC dropout stays overconfident (+1.7 points, ECE $-38\%$).
-Averaging lowers confidence most where members disagree, which is where errors concentrate.}
+\subsubsection{Reliability}\label{sec:fmnist-reliability}
+Figure~\ref{fig:fmnist-reliability} shows the reliability of each method on the test set comparing a single member to the the full $k=10$ ensemble.
+This plot uses the same 15 confidence bins used for ECE and plots each bin's accuracy against its mean confidence.
+For both methods, the majority of test input, roughly 60\%, fall into the highest confidence bin.
+This diagram shows the same shift from over- to underconfidence observed in Section~\ref{sec:fmnist-size}.
+Both single members list mostly below the diagonal for confidences between 0.6 and 0.95, thus they are overconfident.
+After averaging, both method $k=10$ ensembles shift slightly above the diagonal in this range.
+Ensembling therefore corrects the overconfidence of single members but slightly overshoots into underconfidence for both methods.
+
 
 \begin{figure}[htbp]
   \centering
@@ -255,10 +277,18 @@ Averaging lowers confidence most where members disagree, which is where errors c
 \end{figure}
 
 \subsubsection{Function space}
-\plan{DE members spread widely; the 10 MC passes almost coincide.
-Mean disagreement DE 7.1\% vs.\ MC 4.4\%, matching the MI gap.
-PC1 mostly separates the methods (they trained different networks); diversity is the spread within each group.
-Contrast with two moons (Fig.~\ref{fig:tm-function}), where the order is reversed.}
+Figure~\ref{fig:fmnist-function} shows the same function space view as for two moons.
+The first principal component separates the two methods which is expected as the networks were trained independently.
+As opposed to two moons, the DE members have a larger spread than MC dropout.
+We believe this is primarily a reflection of the 2-D projection itself rather than a lack of diversity amongst MC dropout members.
+The two components explain 33\% of the total variance, mostly the separation between the methods and the spread of the DE members.
+About 27\% of DE member spread is captured but only 0.1\% of the MC dropout spread.
+
+The disagreement matrices show a projection-free view of the diversity.
+Unlike two moons, the DE now disagrees more than MC dropout with a mean pairwise disagreement of 7.5\% vs. 6.3\%, consistent with its slightly higher MI in Section~\ref{sec:fmnist-size}.
+Both are far above the 0.5\% and 0.1\% observed with two moons.
+We also see a large difference in member disagreement range, DE pairs range from 5.6\% to 9.8\% disagreement, whereas MC Dropout pairs are nearly uniform with a range of 5.9\% to 6.7\%.
+This intuitively makes sense as DE members are trained independently and whereas MC dropout shares the same weights with smaller variations in activations.
 
 \begin{figure}[htbp]
   \centering
@@ -267,21 +297,20 @@ Contrast with two moons (Fig.~\ref{fig:tm-function}), where the order is reverse
   \label{fig:fmnist-function}
 \end{figure}
 
-\FloatBarrier
-\section{Discussion}
-\plan{Where diversity comes from: random initialization sends DE members to different solutions on both datasets; what matters is whether the test inputs force them to agree.
-On two moons (2-D, test points on the training data) every solution draws the same boundary; on Fashion-MNIST (784-D, ambiguous images) they differ.
-MC dropout samples around one solution on both datasets (Fort et al., 2019).}
+\section{Discussion and Conclusion}
+  Across both datasets, single members of the two methods perform very similarly and the full ensembles are close.
+  Neither method is consistently more diverse.
+  On two moons, MC Dropout passes disagree more than DE members (0.5\% vs. 0.1\%), whereas on Fashion-MNIST the order reverses (6.3\% vs. 7.5\%).
+  Which method produces more diverse members therefore depends on the task and likely the dropout rate and MLP architecture rather than the method alone.
 
-\plan{The same averaging fixes calibration on test and worsens it on train.}
+  A further line of investigation would be to see how adjusting the dropout rate for MC dropout affects these observations or if we can find consistency across tasks.
+  We observed that ensembling only helps when the task is sufficiently complex enough such that the members can disagree.
+  Two moons is easy enough that a single member already solves it, so adding members did not see any benefit.
+  Whereas on Fashion-MNIST, both methods improve with $K$.
 
-\plan{Cost: the DE trains 10 networks; MC dropout trains one and pays only at test time.}
-
-\plan{Limitations: one training seed per configuration; dropout rate 0.1 not tuned; MLPs only; no out-of-distribution or dataset-shift evaluation.}
-
-\section{Conclusion}
-\plan{Both methods improve on a single network, and the improvement grows with $k$.
-The DE improves more on accuracy, NLL and especially calibration, because its members differ more ($2\times$ MI, $1.6\times$ disagreement).
-In-distribution diversity depends on whether the data leaves room for it; on two moons it does not.}
+  Ensembles allow us to separate uncertainty each member has from the uncertainty caused by their disagreement.
+  On two moons MI is low on the trained data but rises as we move away from the data, as expected for epistemic uncertainty.
+  For Fashion-MNIST, MI is only about 8--10\% of the predictive entropy for both methods, so most of the uncertainty is aleatoric.
+  On Fashion-MNIST, averaging also corrects the overconfidence of single members, but beyond $k=5$ both methods become slightly underconfident.
 
 \end{document}
