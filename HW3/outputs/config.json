@@ -1,0 +1,27 @@
+{
+  "seed": 7,
+  "toy": {
+    "latent_dims": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "epochs": 260,
+    "hidden_dim": 128,
+    "beta": 0.03
+  },
+  "mc_rtt": {
+    "latent_dims": [
+      2,
+      8,
+      16
+    ],
+    "epochs": 180,
+    "hidden_dim": 256,
+    "beta": 0.015,
+    "bin_ms": 20,
+    "window_ms": 200,
+    "units": 48
+  }
+}

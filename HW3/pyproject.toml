@@ -1,0 +1,14 @@
+[project]
+name = "prob-dl-hw3"
+version = "0.1.0"
+description = "Conditional variational autoencoders for toy neural manifolds and MC_RTT"
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "torch>=2.2",
+    "h5py>=3.10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

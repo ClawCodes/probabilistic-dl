@@ -1,0 +1,52 @@
+{
+  "mc_rtt": {
+    "metadata": {
+      "bin_ms": 20,
+      "window_ms": 200,
+      "n_units": 48,
+      "n_trials": 1080,
+      "n_train_trials": 810,
+      "n_validation_trials": 270,
+      "rate_transform": "log1p(Hz)"
+    },
+    "metrics": {
+      "2": {
+        "test_loss": 1.0587024688720703,
+        "test_reconstruction": 1.0376970767974854,
+        "test_kl": 1.4003616571426392
+      },
+      "8": {
+        "test_loss": 1.1620527505874634,
+        "test_reconstruction": 1.1345428228378296,
+        "test_kl": 1.8339965343475342
+      },
+      "16": {
+        "test_loss": 1.1304683685302734,
+        "test_reconstruction": 1.105218768119812,
+        "test_kl": 1.6833059787750244
+      }
+    }
+  },
+  "toy": {
+    "1": {
+      "test_loss": 0.06601434201002121,
+      "test_reconstruction": 0.029710281640291214,
+      "test_kl": 1.2101353406906128
+    },
+    "2": {
+      "test_loss": 0.043361846357584,
+      "test_reconstruction": 0.014124150387942791,
+      "test_kl": 0.9745898842811584
+    },
+    "4": {
+      "test_loss": 0.02874002233147621,
+      "test_reconstruction": 0.008419230580329895,
+      "test_kl": 0.6773597598075867
+    },
+    "8": {
+      "test_loss": 0.017615165561437607,
+      "test_reconstruction": 0.004571408964693546,
+      "test_kl": 0.4347919225692749
+    }
+  }
+}

@@ -1,0 +1,82 @@
+\documentclass[10pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{natbib}
+\usepackage{xcolor}
+\graphicspath{{figs/}}
+\newcommand{\verify}[1]{\textcolor{red}{[VERIFY: #1]}}
+\title{Conditional VAEs for Direction-Conditioned Neural Population Activity}
+\author{\verify{Add author name}}
+\date{\verify{Add submission date}}
+
+\begin{document}
+\maketitle
+
+\section{Motivation}
+\begin{itemize}
+  \item \verify{Write the motivation and research question in your own words.}
+  \item The model is a conditional variational autoencoder (cVAE) \citep{kingma2014autoencoding}.
+\end{itemize}
+
+\section{Data}
+\begin{itemize}
+  \item The toy problem represents two simulated neuron rates, conditional on one of eight reach directions.
+  \item The real experiment uses MC\_RTT: M1 spike trains and reaching kinematics from a macaque performing a self-paced random-target task \citep{odoherty2020dataset,makin2018superior,pei2021nlb}.
+  \item \verify{Confirm all dataset wording, version information, and the final citation details against the primary source.}
+\end{itemize}
+
+\section{Method}
+\begin{itemize}
+  \item \verify{Describe preprocessing, the cVAE architecture, objective, training procedure, and latent-size sweeps.}
+  \item \verify{Report exact hyperparameters from the final run.}
+\end{itemize}
+
+\section{Toy conditional manifold}
+\begin{itemize}
+  \item \verify{Interpret the real-versus-generated geometry and the effect of latent size.}
+\end{itemize}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=.9\linewidth]{toy_data_and_samples.png}
+  \caption{\verify{Describe the toy observations and conditional samples.}}
+\end{figure}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=.46\linewidth]{toy_latent.png}
+  \includegraphics[width=.46\linewidth]{toy_latent_sweep.png}
+  \caption{\verify{Describe the toy latent representation and latent-size comparison.}}
+\end{figure}
+
+\section{MC\_RTT population activity}
+\begin{itemize}
+  \item \verify{Interpret generated activity conditionally on movement direction; do not rely only on reconstruction error.}
+  \item \verify{Add concrete validation metrics and comparison to the toy result.}
+\end{itemize}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=.9\linewidth]{mc_rtt_observed_and_reconstructions.png}
+  \caption{\verify{Compare observed and reconstructed real-data activity.}}
+\end{figure}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=.9\linewidth]{mc_rtt_samples.png}
+  \includegraphics[width=.9\linewidth]{mc_rtt_direction_profiles.png}
+  \caption{\verify{Describe generated activity samples and compare their direction-conditioned mean profiles with held-out data.}}
+\end{figure}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=.46\linewidth]{mc_rtt_latent.png}
+  \includegraphics[width=.46\linewidth]{mc_rtt_latent_sweep.png}
+  \caption{\verify{Describe the projected latent means and latent-size comparison.}}
+\end{figure}
+
+\section{Limitations and conclusion}
+\begin{itemize}
+  \item \verify{Discuss rate binning, peak-centered windows, conditional information, and the limits of sample evaluation.}
+  \item \verify{State only the conclusion supported by your final figures and metrics.}
+\end{itemize}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+\end{document}

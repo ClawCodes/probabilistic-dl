@@ -1,0 +1,45 @@
+- Title
+  - Conditional variational autoencoders for direction-conditioned neural population activity
+  - [VERIFY: Select a title that reflects the final results rather than this working title.]
+- Motivation
+  - Explain why population activity varies even for similar movements.
+  - State the generative question: can a cVAE generate plausible M1 activity windows for a requested movement direction?
+  - Distinguish generating neural activity from decoding behavior.
+- Data
+  - Describe the 2-D synthetic task as two simulated neuron rates with eight direction conditions.
+  - Describe MC_RTT, subject/task, M1 recording, and the simultaneous kinematic signals.
+  - State that one 200-ms window is centered at peak hand speed on each trial.
+  - State that the real representation uses 48 held-in units, 20-ms bins, log1p rate transform, and an eight-bin velocity-direction condition.
+  - State the source-provided 810/270 train/validation split.
+  - [VERIFY: Confirm MC_RTT subject/session wording, data-release version, licensing, and exact source citation.]
+- Method
+  - Give the cVAE encoder, diagonal-Gaussian latent distribution, reparameterization, and conditional decoder.
+  - State the reconstruction and KL terms of the training objective.
+  - Explain that movement direction is given to both encoder and decoder as a one-hot condition.
+  - List all fixed architecture/training choices after inspecting the saved configuration/metrics.
+  - Explain the latent-size sweeps: toy 1/2/4/8 and MC_RTT 2/8/16.
+  - [VERIFY: Add exact beta, epochs, optimizer, learning rate, and random seed from the final code/run.]
+- Toy results
+  - Discuss whether samples preserve the requested direction-conditioned crescent geometry.
+  - Compare real and generated samples using `toy_data_and_samples.png`.
+  - Interpret `toy_latent.png` without claiming latent axes have an intrinsic meaning.
+  - Discuss the latent-size result using `toy_latent_sweep.png`.
+  - Use `toy_training.png` only to support claims about convergence, not generative quality.
+- MC_RTT results
+  - Describe the neural population representation before presenting error values.
+  - Compare observed activity, reconstruction, and samples using `mc_rtt_observed_and_reconstructions.png` and `mc_rtt_samples.png`.
+  - Use `mc_rtt_direction_profiles.png` to discuss whether generated direction-conditioned population-rate profiles resemble held-out data.
+  - Discuss whether samples vary across direction conditions in plausible ways.
+  - Use `mc_rtt_latent.png` as a descriptive projection, not a claim of neural clusters unless supported quantitatively.
+  - Discuss latent-size trade-offs using `mc_rtt_latent_sweep.png`.
+  - Use `mc_rtt_training.png` to contextualize optimization behavior.
+  - [VERIFY: Add numerical validation metrics and only make claims supported by the figures.]
+- Limitations and next steps
+  - Note that binned rates discard exact spike timing.
+  - Note that a single peak-centered window is not a full dynamical model of a reach.
+  - Note that samples should also be assessed with population correlation and behavior-decoding tests.
+  - Consider conditioning on continuous velocity or target displacement instead of eight direction bins.
+  - Consider sequence-aware VAEs for full reach trajectories.
+- Conclusion
+  - State the narrow conclusion that the final figures support.
+  - Avoid treating reconstruction loss as sufficient evidence for realistic neural generation.
