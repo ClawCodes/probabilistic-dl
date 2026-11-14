@@ -1,2 +1,6 @@
 # HW2 ignores
 notes.md
+__pycache__
+idea/
+.python_version
+uv.lock
