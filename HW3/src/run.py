@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from .data import ROOT, load_mc_rtt_windows, make_toy_arcs
 from .model import ConditionalVAE, kl_per_dimension, vae_loss
+from .preprocessing_figs import plot_mc_rtt_preprocessing
 
 
 FIGS = ROOT / "latex" / "figs"
@@ -23,7 +24,8 @@ COLORS = plt.cm.hsv(np.linspace(0, 1, 9))[:-1]
 TOY_BETA = 0.015
 MC_RTT_BETA = 0.015 / 8
 TOY_LATENTS, TOY_EPOCHS, TOY_HIDDEN = (1, 2, 4, 8), 260, 128
-MC_RTT_LATENTS, MC_RTT_EPOCHS, MC_RTT_HIDDEN = (2, 8, 16), 600, 256
+MC_RTT_LATENTS, MC_RTT_EPOCHS, MC_RTT_HIDDEN = (2, 8, 16), 50, 256
+MC_RTT_SMOOTH_SIGMA_MS = 30  # Gaussian spike smoothing; rates read at 20 ms bin centres
 ACTIVE_KL_THRESHOLD = 0.01  # nats; a latent dim below this is treated as unused
 
 
@@ -98,6 +100,13 @@ def save(fig, name, tight=True):
     FIGS.mkdir(parents=True, exist_ok=True)
     if tight: fig.tight_layout()
     fig.savefig(FIGS / name, dpi=180, bbox_inches="tight"); plt.close(fig)
+
+
+def save_with_colorbar(fig, image, name, label="log1p firing rate"):
+    """Lay out the panels, then put one shared colorbar in its own strip on the right so it can't overlap them."""
+    fig.tight_layout(rect=(0, 0, .9, 1))
+    fig.colorbar(image, cax=fig.add_axes((.92, .15, .015, .7)), label=label)
+    save(fig, name, tight=False)
 
 
 def save_checkpoint(model, name, latent_dim, x_dim, cond_dim, metadata):
@@ -210,7 +219,8 @@ def toy_experiment():
 
 
 def real_experiment():
-    x, c, labels, source_train, metadata = load_mc_rtt_windows()
+    plot_mc_rtt_preprocessing(save, COLORS, smooth_sigma_ms=MC_RTT_SMOOTH_SIGMA_MS)
+    x, c, labels, source_train, metadata = load_mc_rtt_windows(smooth_sigma_ms=MC_RTT_SMOOTH_SIGMA_MS)
     xtr, ctr, ltr, xte, cte, lte, mean, scale = standardize_source_split(x, c, labels, source_train)
     n_samples = 160
     condition = np.repeat(np.eye(8, dtype=np.float32), n_samples, axis=0)
@@ -238,15 +248,13 @@ def real_experiment():
         image = ax.imshow(source.reshape(units, bins), aspect="auto", cmap="magma", origin="lower", vmin=lo, vmax=hi)
         kind = "observed" if i < 3 else "reconstructed"
         ax.set_title(f"{kind} trial {i % 3 + 1}"); ax.set(xlabel="time bin", ylabel="unit")
-    fig.colorbar(image, ax=axes.ravel().tolist(), shrink=.82, label="log1p firing rate")
-    save(fig, "mc_rtt_observed_and_reconstructions.png")
+    save_with_colorbar(fig, image, "mc_rtt_observed_and_reconstructions.png")
     fig, axes = plt.subplots(2, 4, figsize=(12, 5), sharex=True, sharey=True)
     for i, ax in enumerate(axes.ravel()):
         sample = samples[i * n_samples]
         image = ax.imshow(sample.reshape(units, bins), aspect="auto", cmap="magma", origin="lower", vmin=lo, vmax=hi)
         ax.set_title(f"sampled activity; dir. {i}"); ax.set(xlabel="time bin", ylabel="unit")
-    fig.colorbar(image, ax=axes.ravel().tolist(), shrink=.82, label="log1p firing rate")
-    save(fig, "mc_rtt_samples.png")
+    save_with_colorbar(fig, image, "mc_rtt_samples.png")
     fig, axes = plt.subplots(2, 4, figsize=(11, 5), sharex=True, sharey=True)
     times = np.arange(bins) * metadata["bin_ms"] - metadata["window_ms"] / 2
     for direction, ax in enumerate(axes.ravel()):
@@ -300,9 +308,7 @@ def real_experiment():
             if col == 0: ax.set_ylabel("unit")
             if r == len(rows) - 1: ax.set_xlabel("time bin")
     fig.suptitle(f"MC_RTT direction {direction}: held-out windows vs generated samples by latent size", fontsize=11)
-    fig.tight_layout(rect=(0, 0, .9, 1))
-    fig.colorbar(image, cax=fig.add_axes((.92, .15, .015, .7)), label="log1p firing rate")
-    save(fig, "mc_rtt_samples_by_latent.png", tight=False)
+    save_with_colorbar(fig, image, "mc_rtt_samples_by_latent.png")
 
     return {"mc_rtt": {"beta": MC_RTT_BETA, "epochs": MC_RTT_EPOCHS, "metadata": metadata, "metrics": results}}
 
@@ -316,7 +322,7 @@ def main():
         "seed": 7,
         "kl": "summed over latent dims, averaged over batch",
         "toy": {"latent_dims": list(TOY_LATENTS), "epochs": TOY_EPOCHS, "hidden_dim": TOY_HIDDEN, "beta": TOY_BETA},
-        "mc_rtt": {"latent_dims": list(MC_RTT_LATENTS), "epochs": MC_RTT_EPOCHS, "hidden_dim": MC_RTT_HIDDEN, "beta": MC_RTT_BETA, "bin_ms": 20, "window_ms": 200, "units": 48},
+        "mc_rtt": {"latent_dims": list(MC_RTT_LATENTS), "epochs": MC_RTT_EPOCHS, "hidden_dim": MC_RTT_HIDDEN, "beta": MC_RTT_BETA, "bin_ms": 20, "window_ms": 200, "units": 48, "smooth_sigma_ms": MC_RTT_SMOOTH_SIGMA_MS},
     }
     (OUTPUTS / "config.json").write_text(json.dumps(config, indent=2))
     if args.experiment in ("toy", "all"): summary.update(toy_experiment())
