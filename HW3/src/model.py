@@ -44,7 +44,18 @@ class ConditionalVAE(nn.Module):
         return self.decode(z, c)
 
 
-def vae_loss(reconstruction, target, mu, logvar, beta: float = 0.03):
+def kl_per_dimension(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+    """KL(q(z|x,c) || N(0, I)) for each sample and latent dimension, shape (batch, latent_dim)."""
+    return -0.5 * (1 + logvar - mu.square() - logvar.exp())
+
+
+def vae_loss(reconstruction, target, mu, logvar, beta: float = 0.015):
+    """MSE reconstruction (mean over data dims) + beta * KL.
+
+    The KL is summed over latent dimensions (and averaged over the batch), so
+    beta has the same meaning for every latent size. Averaging over latent
+    dimensions would silently scale the KL weight by 1/latent_dim.
+    """
     reconstruction_loss = F.mse_loss(reconstruction, target, reduction="mean")
-    kl = -0.5 * torch.mean(1 + logvar - mu.square() - logvar.exp())
+    kl = kl_per_dimension(mu, logvar).sum(dim=1).mean()
     return reconstruction_loss + beta * kl, reconstruction_loss, kl

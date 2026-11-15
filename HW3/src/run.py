@@ -11,12 +11,20 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from .data import ROOT, load_mc_rtt_windows, make_toy_arcs
-from .model import ConditionalVAE, vae_loss
+from .model import ConditionalVAE, kl_per_dimension, vae_loss
 
 
 FIGS = ROOT / "latex" / "figs"
 OUTPUTS = ROOT / "outputs"
 COLORS = plt.cm.hsv(np.linspace(0, 1, 9))[:-1]
+# KL weights for the summed-over-latent-dims KL. Each matches the effective
+# weight of the earlier per-dim-averaged loss at one reference latent size
+# (toy: z=2, 0.03/2; MC_RTT: z=8, 0.015/8) and is now fixed across the sweep.
+TOY_BETA = 0.015
+MC_RTT_BETA = 0.015 / 8
+TOY_LATENTS, TOY_EPOCHS, TOY_HIDDEN = (1, 2, 4, 8), 260, 128
+MC_RTT_LATENTS, MC_RTT_EPOCHS, MC_RTT_HIDDEN = (2, 8, 16), 600, 256
+ACTIVE_KL_THRESHOLD = 0.01  # nats; a latent dim below this is treated as unused
 
 
 def seed_everything(seed=7):
@@ -40,12 +48,23 @@ def standardize_source_split(x, c, labels, is_train):
     )
 
 
-def train(x_train, c_train, x_test, c_test, latent_dim, epochs, hidden=128, beta=.03, seed=7):
+@torch.no_grad()
+def evaluate(model, x, c, beta):
+    """One forward pass on held-out data; returns (loss, recon, kl) plus encoder outputs."""
+    model.eval()
+    reconstructed, mu, logvar = model(x, c)
+    loss, rec, kl = vae_loss(reconstructed, x, mu, logvar, beta)
+    return (loss.item(), rec.item(), kl.item()), mu, logvar, reconstructed
+
+
+def train(x_train, c_train, x_test, c_test, latent_dim, epochs, hidden=128, beta=TOY_BETA, seed=7):
+    """Train one cVAE. History columns: train loss/recon/KL, then validation loss/recon/KL."""
     seed_everything(seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ConditionalVAE(x_train.shape[1], c_train.shape[1], latent_dim, hidden).to(device)
     loader = DataLoader(TensorDataset(torch.from_numpy(x_train), torch.from_numpy(c_train)), batch_size=min(256, len(x_train)), shuffle=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=1e-5)
+    x_val, c_val = torch.from_numpy(x_test).to(device), torch.from_numpy(c_test).to(device)
     history = []
     for epoch in range(epochs):
         model.train(); values = []
@@ -55,18 +74,30 @@ def train(x_train, c_train, x_test, c_test, latent_dim, epochs, hidden=128, beta
             loss, rec, kl = vae_loss(reconstruction, x, mu, logvar, beta)
             optimizer.zero_grad(); loss.backward(); optimizer.step()
             values.append((loss.item(), rec.item(), kl.item()))
-        history.append(np.mean(values, axis=0))
-    model.eval()
-    with torch.no_grad():
-        x, c = torch.from_numpy(x_test).to(device), torch.from_numpy(c_test).to(device)
-        reconstructed, mu, logvar = model(x, c)
-        loss, rec, kl = vae_loss(reconstructed, x, mu, logvar, beta)
-    return model, np.array(history), {"test_loss": loss.item(), "test_reconstruction": rec.item(), "test_kl": kl.item()}, mu.cpu().numpy(), reconstructed.cpu().numpy()
+        # The validation pass draws random z; save/restore the RNG so it does not
+        # change the training randomness (shuffling, reparameterization noise).
+        cpu_rng = torch.get_rng_state()
+        cuda_rng = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+        val_values, *_ = evaluate(model, x_val, c_val, beta)
+        torch.set_rng_state(cpu_rng)
+        if cuda_rng is not None: torch.cuda.set_rng_state_all(cuda_rng)
+        history.append((*np.mean(values, axis=0), *val_values))
+    (loss, rec, kl), mu, logvar, reconstructed = evaluate(model, x_val, c_val, beta)
+    kl_dims = kl_per_dimension(mu, logvar).mean(0).cpu().numpy()
+    metrics = {
+        "test_loss": loss,
+        "test_reconstruction": rec,
+        "test_kl": kl,  # total KL, summed over latent dims
+        "test_kl_per_dim": [round(float(v), 4) for v in kl_dims],
+        "active_dims": int((kl_dims > ACTIVE_KL_THRESHOLD).sum()),
+    }
+    return model, np.array(history), metrics, mu.cpu().numpy(), reconstructed.cpu().numpy()
 
 
-def save(fig, name):
+def save(fig, name, tight=True):
     FIGS.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout(); fig.savefig(FIGS / name, dpi=180, bbox_inches="tight"); plt.close(fig)
+    if tight: fig.tight_layout()
+    fig.savefig(FIGS / name, dpi=180, bbox_inches="tight"); plt.close(fig)
 
 
 def save_checkpoint(model, name, latent_dim, x_dim, cond_dim, metadata):
@@ -82,29 +113,68 @@ def save_checkpoint(model, name, latent_dim, x_dim, cond_dim, metadata):
     }, weights / name)
 
 
-def plot_loss(history, name, title, beta):
-    fig, ax = plt.subplots(figsize=(5.5, 3.4)); ax.plot(history[:, 0], label="ELBO loss"); ax.plot(history[:, 1], label="reconstruction"); ax.plot(history[:, 2] * beta, label=rf"{beta:g} × KL")
-    ax.set(xlabel="epoch", ylabel="loss", title=title); ax.legend(frameon=False); save(fig, name)
+def plot_training(histories, name, title, beta):
+    """Rows = latent sizes; columns = total loss, reconstruction, KL. Train solid, validation dashed."""
+    dims = list(histories)
+    fig, axes = plt.subplots(len(dims), 3, figsize=(11, 2.3 * len(dims)), sharex=True, sharey="col", squeeze=False)
+    columns = (f"loss (recon + {beta:g}·KL)", "reconstruction MSE", "KL (nats, summed over z)")
+    for row, zdim in enumerate(dims):
+        h = histories[zdim]
+        for col in range(3):
+            ax = axes[row, col]
+            ax.plot(h[:, col], color="C0", label="train")
+            ax.plot(h[:, col + 3], color="C1", linestyle="--", label="validation")
+            if row == 0: ax.set_title(columns[col], fontsize=10)
+            if row == len(dims) - 1: ax.set_xlabel("epoch")
+        axes[row, 0].set_ylabel(f"z = {zdim}")
+    axes[0, 0].legend(frameon=False, fontsize=8)
+    fig.suptitle(title, fontsize=11)
+    save(fig, name)
+
+
+def plot_latent_sweep(results, name, title):
+    """Held-out loss, reconstruction and total KL (labelled with active dims) against latent size."""
+    dims = list(results)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3.4))
+    for ax, key, label in zip(axes, ("test_loss", "test_reconstruction", "test_kl"),
+                              ("test loss", "test reconstruction MSE", "test KL (nats, summed)")):
+        ax.plot(dims, [results[d][key] for d in dims], marker="o")
+        ax.set(xlabel="latent dimensionality", ylabel=label, xticks=dims)
+    for d in dims:
+        axes[2].annotate(f"{results[d]['active_dims']}/{d} active", (d, results[d]["test_kl"]),
+                         textcoords="offset points", xytext=(0, 7), ha="center", fontsize=8)
+    axes[2].margins(y=.2)
+    fig.suptitle(title, fontsize=11)
+    save(fig, name)
+
+
+def fit_pca2(x):
+    """Top-2 principal axes of x; returns (mean, components) so other data can share the projection."""
+    mean = x.mean(0); _, _, vt = np.linalg.svd(x - mean, full_matrices=False)
+    return mean, vt[:2]
 
 
 def pca2(x):
-    centered = x - x.mean(0); _, _, vt = np.linalg.svd(centered, full_matrices=False)
-    return centered @ vt[:2].T
+    mean, components = fit_pca2(x)
+    return (x - mean) @ components.T
 
 
 def toy_experiment():
     x, c, labels = make_toy_arcs()
     xtr, ctr, ltr, xte, cte, lte, mean, scale = split_and_standardize(x, c, labels)
-    results = {}
-    for zdim in (1, 2, 4, 8):
-        model, history, metrics, latent, reconstructed = train(xtr, ctr, xte, cte, zdim, 260)
-        results[zdim] = metrics
-        save_checkpoint(model, f"toy_z{zdim}.pt", zdim, xtr.shape[1], ctr.shape[1], {"seed": 7, "beta": .03, "epochs": 260})
+    x_test_raw = xte * scale + mean
+    n_samples = 250
+    sample_conditions = np.repeat(np.eye(8, dtype=np.float32), n_samples, axis=0)
+    sample_labels = np.repeat(np.arange(8), n_samples)
+    results, all_samples, histories = {}, {}, {}
+    for zdim in TOY_LATENTS:
+        model, history, metrics, latent, reconstructed = train(xtr, ctr, xte, cte, zdim, TOY_EPOCHS, hidden=TOY_HIDDEN, beta=TOY_BETA)
+        device = next(model.parameters()).device
+        with torch.no_grad(): samples = model.sample(torch.from_numpy(sample_conditions).to(device)).cpu().numpy()
+        samples = samples * scale + mean
+        all_samples[zdim], histories[zdim], results[zdim] = samples, history, metrics
+        save_checkpoint(model, f"toy_z{zdim}.pt", zdim, xtr.shape[1], ctr.shape[1], {"seed": 7, "beta": TOY_BETA, "epochs": TOY_EPOCHS})
         if zdim == 2:
-            device = next(model.parameters()).device
-            sample_conditions = np.repeat(np.eye(8, dtype=np.float32), 250, axis=0)
-            with torch.no_grad(): samples = model.sample(torch.from_numpy(sample_conditions).to(device)).cpu().numpy()
-            samples = samples * scale + mean
             fig, axes = plt.subplots(1, 2, figsize=(9, 4), sharex=True, sharey=True)
             for k in range(8):
                 axes[0].scatter(x[labels == k, 0], x[labels == k, 1], s=4, alpha=.35, color=COLORS[k])
@@ -115,27 +185,52 @@ def toy_experiment():
             fig, ax = plt.subplots(figsize=(4.5, 4));
             for k in range(8): ax.scatter(latent[lte == k, 0], latent[lte == k, 1], s=6, alpha=.45, color=COLORS[k], label=f"dir. {k}")
             ax.set(title="Toy encoded means (2-D latent)", xlabel="$z_1$", ylabel="$z_2$"); ax.legend(ncol=2, fontsize=8, frameon=False); save(fig, "toy_latent.png")
-            plot_loss(history, "toy_training.png", "Toy cVAE training (2-D latent)", beta=.03)
-    fig, ax = plt.subplots(figsize=(5, 3.4)); dims = list(results); ax.plot(dims, [results[d]["test_reconstruction"] for d in dims], marker="o")
-    ax.set(xlabel="latent dimensionality", ylabel="test reconstruction MSE", title="Toy latent-size comparison", xticks=dims); save(fig, "toy_latent_sweep.png")
-    return {"toy": results}
+
+    plot_training(histories, "toy_training.png", "Toy cVAE training by latent size", TOY_BETA)
+
+    # Generated samples for every latent size next to the observations, on shared axes.
+    dims = list(results)
+    fig, axes = plt.subplots(1, len(dims) + 1, figsize=(3.4 * (len(dims) + 1), 3.8), sharex=True, sharey=True)
+    for k in range(8):
+        axes[0].scatter(x_test_raw[lte == k, 0], x_test_raw[lte == k, 1], s=4, alpha=.45, color=COLORS[k])
+    axes[0].set_title("held-out observations")
+    for ax, zdim in zip(axes[1:], dims):
+        for k in range(8):
+            pts = all_samples[zdim][sample_labels == k]
+            ax.scatter(pts[:, 0], pts[:, 1], s=4, alpha=.35, color=COLORS[k])
+        r = results[zdim]
+        ax.set_title(f"samples, z = {zdim}\nactive dims {r['active_dims']}/{zdim}, test recon {r['test_reconstruction']:.4f}", fontsize=10)
+    for ax in axes: ax.set(xlabel="simulated neuron 1", aspect="equal")
+    axes[0].set_ylabel("simulated neuron 2")
+    fig.suptitle(f"Toy cVAE samples by latent size (β = {TOY_BETA:g})", fontsize=11, y=1.06)
+    save(fig, "toy_samples_by_latent.png")
+
+    plot_latent_sweep(results, "toy_latent_sweep.png", "Toy latent-size comparison")
+    return {"toy": {"beta": TOY_BETA, "epochs": TOY_EPOCHS, **results}}
 
 
 def real_experiment():
     x, c, labels, source_train, metadata = load_mc_rtt_windows()
     xtr, ctr, ltr, xte, cte, lte, mean, scale = standardize_source_split(x, c, labels, source_train)
-    results = {}; saved = None
-    for zdim in (2, 8, 16):
-        model, history, metrics, latent, reconstructed = train(xtr, ctr, xte, cte, zdim, 180, hidden=256, beta=.015)
-        results[zdim] = metrics
-        save_checkpoint(model, f"mc_rtt_z{zdim}.pt", zdim, xtr.shape[1], ctr.shape[1], {**metadata, "seed": 7, "beta": .015, "epochs": 180, "hidden_dim": 256})
+    n_samples = 160
+    condition = np.repeat(np.eye(8, dtype=np.float32), n_samples, axis=0)
+    sample_labels = np.repeat(np.arange(8), n_samples)
+    results, histories, samples_by_z = {}, {}, {}
+    for zdim in MC_RTT_LATENTS:
+        model, history, metrics, latent, reconstructed = train(xtr, ctr, xte, cte, zdim, MC_RTT_EPOCHS, hidden=MC_RTT_HIDDEN, beta=MC_RTT_BETA)
+        results[zdim], histories[zdim] = metrics, history
+        save_checkpoint(model, f"mc_rtt_z{zdim}.pt", zdim, xtr.shape[1], ctr.shape[1], {**metadata, "seed": 7, "beta": MC_RTT_BETA, "epochs": MC_RTT_EPOCHS, "hidden_dim": MC_RTT_HIDDEN})
+        device = next(model.parameters()).device
+        with torch.no_grad(): sampled = model.sample(torch.from_numpy(condition).to(device)).cpu().numpy()
+        samples_by_z[zdim] = sampled * scale + mean
         if zdim == 8:
-            device = next(model.parameters()).device
-            condition = np.repeat(np.eye(8, dtype=np.float32), 160, axis=0)
-            with torch.no_grad(): sampled = model.sample(torch.from_numpy(condition).to(device)).cpu().numpy()
-            saved = (history, latent, xte * scale + mean, reconstructed * scale + mean, sampled * scale + mean)
-    history, latent, observed, reconstruction, samples = saved
+            saved = (latent, reconstructed * scale + mean)
+    latent, reconstruction = saved
+    observed = xte * scale + mean
+    samples = samples_by_z[8]
     units, bins = metadata["n_units"], metadata["window_ms"] // metadata["bin_ms"]
+
+    # --- Existing z = 8 figures (referenced by main.tex) ---
     lo, hi = np.quantile(np.concatenate((observed.ravel(), reconstruction.ravel(), samples.ravel())), (.01, .99))
     fig, axes = plt.subplots(2, 3, figsize=(10, 5), sharex=True, sharey=True)
     for i, ax in enumerate(axes.ravel()):
@@ -147,7 +242,7 @@ def real_experiment():
     save(fig, "mc_rtt_observed_and_reconstructions.png")
     fig, axes = plt.subplots(2, 4, figsize=(12, 5), sharex=True, sharey=True)
     for i, ax in enumerate(axes.ravel()):
-        sample = samples[i * 160]
+        sample = samples[i * n_samples]
         image = ax.imshow(sample.reshape(units, bins), aspect="auto", cmap="magma", origin="lower", vmin=lo, vmax=hi)
         ax.set_title(f"sampled activity; dir. {i}"); ax.set(xlabel="time bin", ylabel="unit")
     fig.colorbar(image, ax=axes.ravel().tolist(), shrink=.82, label="log1p firing rate")
@@ -156,7 +251,7 @@ def real_experiment():
     times = np.arange(bins) * metadata["bin_ms"] - metadata["window_ms"] / 2
     for direction, ax in enumerate(axes.ravel()):
         real_profile = observed[lte == direction].reshape(-1, units, bins).mean(axis=(0, 1))
-        generated_profile = samples[direction * 160:(direction + 1) * 160].reshape(-1, units, bins).mean(axis=(0, 1))
+        generated_profile = samples[sample_labels == direction].reshape(-1, units, bins).mean(axis=(0, 1))
         ax.plot(times, real_profile, color="black", label="held-out" if direction == 0 else None)
         ax.plot(times, generated_profile, color="#d95f02", linestyle="--", label="generated" if direction == 0 else None)
         ax.set(title=f"direction {direction}", xlabel="ms from peak speed", ylabel="mean log1p rate")
@@ -166,10 +261,50 @@ def real_experiment():
     fig, ax = plt.subplots(figsize=(4.5, 4));
     for k in range(8): ax.scatter(proj[lte == k, 0], proj[lte == k, 1], s=8, alpha=.45, color=COLORS[k], label=f"dir. {k}")
     ax.set(title="MC_RTT latent means (8-D, PCA view)", xlabel="PC 1", ylabel="PC 2"); ax.legend(ncol=2, fontsize=8, frameon=False); save(fig, "mc_rtt_latent.png")
-    plot_loss(history, "mc_rtt_training.png", "MC_RTT cVAE training (8-D latent)", beta=.015)
-    fig, ax = plt.subplots(figsize=(5, 3.4)); dims = list(results); ax.plot(dims, [results[d]["test_reconstruction"] for d in dims], marker="o")
-    ax.set(xlabel="latent dimensionality", ylabel="test reconstruction MSE", title="MC_RTT latent-size comparison", xticks=dims); save(fig, "mc_rtt_latent_sweep.png")
-    return {"mc_rtt": {"metadata": metadata, "metrics": results}}
+
+    # --- Latent-size sweep figures ---
+    plot_training(histories, "mc_rtt_training.png", "MC_RTT cVAE training by latent size", MC_RTT_BETA)
+    plot_latent_sweep(results, "mc_rtt_latent_sweep.png", "MC_RTT latent-size comparison")
+
+    # PCA of held-out windows; generated samples projected onto the same two axes.
+    pca_mean, components = fit_pca2(observed)
+    dims = list(samples_by_z)
+    fig, axes = plt.subplots(1, len(dims) + 1, figsize=(3.6 * (len(dims) + 1), 3.8), sharex=True, sharey=True)
+    proj = (observed - pca_mean) @ components.T
+    for k in range(8):
+        axes[0].scatter(proj[lte == k, 0], proj[lte == k, 1], s=8, alpha=.6, color=COLORS[k], label=f"dir. {k}")
+    axes[0].set_title(f"held-out windows (n = {len(observed)})", fontsize=10)
+    axes[0].legend(ncol=2, fontsize=7, frameon=False)
+    for ax, zdim in zip(axes[1:], dims):
+        proj = (samples_by_z[zdim] - pca_mean) @ components.T
+        for k in range(8):
+            ax.scatter(proj[sample_labels == k, 0], proj[sample_labels == k, 1], s=4, alpha=.35, color=COLORS[k])
+        ax.set_title(f"samples, z = {zdim} ({n_samples}/direction)\nactive dims {results[zdim]['active_dims']}/{zdim}", fontsize=10)
+    for ax in axes: ax.set(xlabel="PC 1")
+    axes[0].set_ylabel("PC 2")
+    fig.suptitle("MC_RTT: held-out and generated windows on the held-out data's top two principal components", fontsize=11, y=1.06)
+    save(fig, "mc_rtt_pca_by_latent.png")
+
+    # Heatmaps for one direction: average window + 3 individual windows, held-out vs each latent size.
+    direction = int(np.argmax(np.bincount(lte, minlength=8)))
+    real_dir = observed[lte == direction]
+    rows = [("held-out", real_dir)] + [(f"z = {z}", samples_by_z[z][sample_labels == direction]) for z in dims]
+    lo, hi = np.quantile(np.concatenate([observed.ravel()] + [s.ravel() for s in samples_by_z.values()]), (.01, .99))
+    fig, axes = plt.subplots(len(rows), 4, figsize=(11, 2.3 * len(rows)), sharex=True, sharey=True)
+    for r, (label, windows) in enumerate(rows):
+        panels = [(f"{label}: mean of {len(windows)}", windows.mean(0))] + [(f"{label}: {'trial' if r == 0 else 'sample'} {i + 1}", windows[i]) for i in range(3)]
+        for col, (panel_title, values) in enumerate(panels):
+            ax = axes[r, col]
+            image = ax.imshow(values.reshape(units, bins), aspect="auto", cmap="magma", origin="lower", vmin=lo, vmax=hi)
+            ax.set_title(panel_title, fontsize=9)
+            if col == 0: ax.set_ylabel("unit")
+            if r == len(rows) - 1: ax.set_xlabel("time bin")
+    fig.suptitle(f"MC_RTT direction {direction}: held-out windows vs generated samples by latent size", fontsize=11)
+    fig.tight_layout(rect=(0, 0, .9, 1))
+    fig.colorbar(image, cax=fig.add_axes((.92, .15, .015, .7)), label="log1p firing rate")
+    save(fig, "mc_rtt_samples_by_latent.png", tight=False)
+
+    return {"mc_rtt": {"beta": MC_RTT_BETA, "epochs": MC_RTT_EPOCHS, "metadata": metadata, "metrics": results}}
 
 
 def main():
@@ -179,8 +314,9 @@ def main():
     summary = json.loads(metrics_path.read_text()) if metrics_path.exists() else {}
     config = {
         "seed": 7,
-        "toy": {"latent_dims": [1, 2, 4, 8], "epochs": 260, "hidden_dim": 128, "beta": .03},
-        "mc_rtt": {"latent_dims": [2, 8, 16], "epochs": 180, "hidden_dim": 256, "beta": .015, "bin_ms": 20, "window_ms": 200, "units": 48},
+        "kl": "summed over latent dims, averaged over batch",
+        "toy": {"latent_dims": list(TOY_LATENTS), "epochs": TOY_EPOCHS, "hidden_dim": TOY_HIDDEN, "beta": TOY_BETA},
+        "mc_rtt": {"latent_dims": list(MC_RTT_LATENTS), "epochs": MC_RTT_EPOCHS, "hidden_dim": MC_RTT_HIDDEN, "beta": MC_RTT_BETA, "bin_ms": 20, "window_ms": 200, "units": 48},
     }
     (OUTPUTS / "config.json").write_text(json.dumps(config, indent=2))
     if args.experiment in ("toy", "all"): summary.update(toy_experiment())
