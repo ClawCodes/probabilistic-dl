@@ -189,7 +189,7 @@ def toy_experiment():
                 axes[0].scatter(x[labels == k, 0], x[labels == k, 1], s=4, alpha=.35, color=COLORS[k])
                 axes[1].scatter(samples[k*250:(k+1)*250, 0], samples[k*250:(k+1)*250, 1], s=4, alpha=.35, color=COLORS[k])
             axes[0].set_title("Toy observations"); axes[1].set_title("cVAE samples, requested direction")
-            for ax in axes: ax.set(xlabel="simulated neuron 1", ylabel="simulated neuron 2", aspect="equal")
+            for ax in axes: ax.set(xlabel="$x_1$", ylabel="$x_2$", aspect="equal")
             save(fig, "toy_data_and_samples.png")
             fig, ax = plt.subplots(figsize=(4.5, 4));
             for k in range(8): ax.scatter(latent[lte == k, 0], latent[lte == k, 1], s=6, alpha=.45, color=COLORS[k], label=f"dir. {k}")
@@ -209,8 +209,8 @@ def toy_experiment():
             ax.scatter(pts[:, 0], pts[:, 1], s=4, alpha=.35, color=COLORS[k])
         r = results[zdim]
         ax.set_title(f"samples, z = {zdim}\nactive dims {r['active_dims']}/{zdim}, test recon {r['test_reconstruction']:.4f}", fontsize=10)
-    for ax in axes: ax.set(xlabel="simulated neuron 1", aspect="equal")
-    axes[0].set_ylabel("simulated neuron 2")
+    for ax in axes: ax.set(xlabel="$x_1$", aspect="equal")
+    axes[0].set_ylabel("$x_2$")
     fig.suptitle(f"Toy cVAE samples by latent size (β = {TOY_BETA:g})", fontsize=11, y=1.06)
     save(fig, "toy_samples_by_latent.png")
 

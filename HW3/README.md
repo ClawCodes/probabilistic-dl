@@ -60,7 +60,7 @@ The 50 MC_RTT epochs are deliberate. Validation reconstruction reaches its minim
 ## Data
 
 ### Toy data
-Eight noisy crescents in 2-D (`make_toy_arcs`), one per movement direction, 600 points each, standing in for the activity of two simulated neurons. Within a direction, points vary along the crescent and across its thickness.
+A synthetic 2-D dataset (`make_toy_arcs`): eight noisy crescents, one per direction label, 600 points each. Each crescent is the same shape rotated by its direction's angle (0°, 45°, …) plus Gaussian noise. The axes are plain features x₁, x₂, not firing rates. The data is a small, visible test of whether the cVAE can learn a direction-dependent low-dimensional manifold: points vary mainly along each crescent (one intrinsic dimension) and a little across its thickness.
 
 ### MC_RTT
 Monkey Indy, Sabes lab (O'Doherty et al.), as packaged by the Neural Latents Benchmark (NLB):

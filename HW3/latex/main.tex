@@ -2,51 +2,210 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{amsmath}
 \usepackage{natbib}
 \usepackage{xcolor}
 \graphicspath{{figs/}}
 \newcommand{\verify}[1]{\textcolor{red}{[VERIFY: #1]}}
-\title{Conditional VAEs for Direction-Conditioned Neural Population Activity}
-\author{\verify{Add author name}}
-\date{\verify{Add submission date}}
+\title{HW \#3 - Variational Autoencoders}
+\author{Nicole Lacey \and Christopher Lawton}
+\date{November 15, 2026}
 
 \begin{document}
 \maketitle
 
-\section{Motivation}
-\begin{itemize}
-  \item \verify{Write the motivation and research question in your own words.}
-  \item The model is a conditional variational autoencoder (cVAE) \citep{kingma2014autoencoding}.
-\end{itemize}
+\section{Introduction}
+
+A Variational Autoencoder (VAE) is a latent-variable generative model in which a latent variable $z$ is drawn from a prior $p(z) = \mathcal{N}(0, I)$, then a subsequent decoder network maps the latent $z$ to a distribution over the observations, $p(x \mid z)$.
+Since the true posterior, $p(z \mid x)$, is intractable we instead approximate the posterior using an encoder network, learning $q(z \mid x)$.
+The two networks, the encoder and decoder, are trained together using two objectives: reconstructing $x$ from it's encoding $z$, and keeping $q(z \mid x)$ close to the prior so that latent draws from the prior decode to realistic $x$ approximations.
+A conditional VAE (cVAE) expands on the VAE architecture by incorporating a paired label $c$ to the provided $x$.
+$c$ is provider to both the encoder and decoder networks independently.
+Using a $z$ drawn from the prior and a selected label $c$ we can generate new samples of the chosen class and the latent variable describes the variation the label does not explain.
+
+In this report we use a cVAE to first explore how a cVAE performs in its objectives across varying sizes of latent variables $z$ on a simple, synthetic 2D dataset, and then expand our analysis to a complex dataset, MC\_RTT, from the Neural Latents Benchmark.
 
 \section{Data}
+
+\subsection{Synthetic 2D}
+
+We generate a synthetic 2-D dataset inspired by the popular two moons dataset; instead of two crescents we construct eight noisy crescents, one per direction label.
+Each crescent is the same shape, just rotated by its direction's angle (0°, 45°, …, 315°), the direction labels were chosen such that the crescents for a complete circle.
+Points vary along each crescent and across it by including jitter and Gaussian noise.
+The data is split randomly in an 80/20 split (3,840 train, 960 test).
+Each feature is standardized before training.
+This data set will serve as our simple benchmark to observe how well our cVAE is learning and provide a cursory glimpse into how an increase in the number of latent dimensions impacts the model's performance.
+
+\subsection{MC\_RTT}
+
+MC\_RTT is a recording a single recording from an adult male rhesus macaque monkey of the following task:
+
+Task:
 \begin{itemize}
-  \item The toy problem represents two simulated neuron rates, conditional on one of eight reach directions.
-  \item The real experiment uses MC\_RTT: M1 spike trains and reaching kinematics from a macaque performing a self-paced random-target task \citep{odoherty2020dataset,makin2018superior,pei2021nlb}.
-  \item \verify{Confirm all dataset wording, version information, and the final citation details against the primary source.}
+  \item The monkey moves its fingertip in a horizontal plane to steer a cursor onto targets on a screen
+  \item Targets appear randomly, one at a time on an $8 \times 8$ grid
+  \item As soon as a given target is reached a new target appears; there is no resetting, instructing, or delay between targets so the session is a continuous stream of reaches rather than a discrete set of trials.
+\end{itemize}
+
+Neural activity was recorded with a 96-channel microelectrode array implanted in the primary motor cotex (M1).
+Each electrode picks up voltage fluctuations of nearby neurons, and each action potential (spike) appears as a brief deflection whose shape depends on the neuron that produced it.
+During production of the data a spike sorting method is applied to group spikes by their waveform, it is assumed that the sorted groups represent spikes from a single neuron; each group is called a \emph{unit}.
+Since one electrode can record several neurons, the 96 channels yield 130 units.
+As eluded to above, a unit is a putative neuron, meaning that, because sorting is imperfect, some units may mix spikes from more than one cell or one cell can produce distinct waveforms over its lifetime in the study so a single cell can be sorted as two units.
+For each unit the dataset stores the times at which its spikes occurred.
+
+We use the version of MC\_RTT released by the Neural  Latents Benchmark (NLB) \citep{pei2021nlb}.
+NLB is a collection of neural population datasets in a standard format.
+During the task, both neural activity and behavior were measured; Table~\ref{tab:mc_rtt_variables} lists the features in the MC\_RTT dataset.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \caption{Features in the NLB release of MC\_RTT}
+  \label{tab:mc_rtt_variables}
+  \begin{tabular}{@{}l p{0.7\linewidth}@{}}
+    \toprule
+    Variable        & Description                                                                                                                                                                                                  \\
+    \midrule
+    Spike times     & Spike times of 130 sorted units \\
+    Finger position & 3-D fingertip position (mm).                                                                                                                                                                                 \\
+    Finger velocity & 2-D fingertip velocity in the reaching plane (mm/s)                                                                                   \\
+    Cursor position & 2-D on-screen cursor position, which follows the fingertip                                                                                                                                                  \\
+    Target position & 2-D position of the current target                                                                                                                                                                          \\
+    Chunk table     & Start/stop times of each NLB chunk and its split label                                                                                                                                                    \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+All signals are sampled over about 10.8 minutes, during which there are 848 target changes.
+NLB divides the continuous recording into 1,080 consecutive 600 ms chunks.
+Each chunk is labelled train (810) or validation (270) and the chunks are not aligned to reaches or targets onsets.
+Of these measurements, we use only the spike times of 48 units, finger velocity, and the chunk table.
+
+\subsection{MC\_RTT Preprocessing}
+
+One observation is extracted from each 600 ms chunk.
+The preprocessing flow follows:
+
+\begin{itemize}
+  \item Filter to the 48 held-in units with the most spikes
+  \item Section out a 200ms window centered on the time of peak finger speed within the chunk
+  \item We use the direction of the finger velocity at the time of peak speed and split it into 8 sectors of 45° (these become the labels we condition on)
+  \item Each unit's spike train is convolved with a Gaussian ($\sigma$ = 30 ms) to give a continuous firing rate, which is sampled at the center of each of ten 20ms bins; we refer to these values as the ``rate''
+  \item We apply the transformation $\log(1 + \text{rate})$ over each extracted rate to provide a compressed, less lopsided signal for the network to train on; resulting in 48 units x 10 bins (in the 200 ms window) for a total of 480 features
 \end{itemize}
 
 \section{Method}
-\begin{itemize}
-  \item \verify{Describe preprocessing, the cVAE architecture, objective, training procedure, and latent-size sweeps.}
-  \item \verify{Report exact hyperparameters from the final run.}
-\end{itemize}
+\subsection{Network Architectures}
+
+Both networks are MLPs.
+The direction label $c$ we extract in the preprocessing step is an 8-dimensional one-hot vector that is concatenated to the input of both the encoder and the decoder.
+With input size $D$, hidden width $H$ and latent size $L$, the encoder maps $[x, c]$ to the parameters of $q(z \mid x, c)$:
+
+\[
+  \text{Linear}((D+8) \times H) \to \text{SiLU} \to
+  \text{Linear}(H \times H) \to \text{SiLU} \to
+  \begin{cases}
+    \text{Linear}(H \times L) \to \mu \\
+    \text{Linear}(H \times L) \to \log\sigma^2
+  \end{cases}
+\]
+
+where $\log\sigma^2$ is clamped to $[-8, 8]$ for training stability.
+During training the latent is sampled with the reparameterization trick $z = \mu + \sigma \odot \epsilon$ with $\epsilon \sim \mathcal{N}(0, I)$.
+To generate new data we draw $z \sim \mathcal{N}(0, I)$.
+The decoder maps $[z, c]$ to a reconstruction $\hat{x}$:
+\[
+  \text{Linear}((L+8) \times H) \to \text{SiLU} \to
+  \text{Linear}(H \times H) \to \text{SiLU} \to
+  \text{Linear}(H \times D).
+\]
+For the toy data $D = 2$ and $H = 128$; for MC\_RTT $D = 480$ and $H = 256$.
+
+\subsection{Training}
+
+The training loss is defined as:
+
+$$\mathcal{L} = \underbrace{\tfrac{1}{D}\lVert x - \hat{x} \rVert^2}_{\text{reconstruction MSE}} + \beta \sum_{j=1}^{L} \underbrace{\tfrac{1}{2}\left(\mu_j^2 + \sigma_j^2 - \log\sigma_j^2 - 1\right)}_{\mathrm{KL}_j},$$
+
+averaged over the batch, where $D$ is the input dimension and $L$ is the latent dimension.
+The KL is summed over latent dimensions instead of averaging to avoid dividing the effective KL weight by $L$, so larger latent spaces are not penalized less and runs varying $L$ would be more directly comparable.
+$\beta$ sets the balance between reconstruction and staying close to the prior.
+We consider a latent dimension to be active if its KL, averaged over held-out inputs, is above 0.01 nats.
+An inactive dimension outputs the prior for every input and carries no information.
+
+Both experiments are trained with AdamW (learning rate $2 \times 10^{-3}$, weight decay $10^{-5}$), a batch size of 256 and a fixed random seed of 7.
+The training and held-out loss, reconstruction error and KL are recorded after every epoch.
+Table~\ref{tab:training_settings} lists the settings that differ between the two experiments.
+$\beta$ is held fixed within each latent-size sweep.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \caption{Training settings for each experiment.}
+  \label{tab:training_settings}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+                                 & Toy                       & MC\_RTT                  \\
+    \midrule
+    Input dimension $D$          & 2                         & 480                      \\
+    Hidden width $H$             & 128                       & 256                      \\
+    Latent sizes $L$             & 1, 2, 4, 8                & 2, 8, 16                 \\
+    $\beta$                      & 0.015                     & 0.001875                 \\
+    Epochs                       & 260                       & 50                       \\
+    Train / held-out             & 3,840 / 960 (random)      & 810 / 270 (NLB split)    \\
+    Generated samples per direction & 250                    & 160                      \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+MC\_RTT is trained for only 50 epochs because its validation reconstruction error reaches a minimum around epochs 20--35 and then rises, so longer training only overfits.
 
 \section{Toy conditional manifold}
+
+Figure~\ref{fig:toy_training} shows the training and validation curves for each latent size.
+All four models converge within \~20 epochs and the training and validation curves lie ontop of eachother, so there is no sign of overfitting.
+The KL term rises sharply in the first few epochs as the encoder begins to learn the latent space then quickly settles.
+Overall the model seemed to have learned the latent space well and provided strong reconstruction.
+
 \begin{itemize}
   \item \verify{Interpret the real-versus-generated geometry and the effect of latent size.}
 \end{itemize}
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=.9\linewidth]{toy_data_and_samples.png}
-  \caption{\verify{Describe the toy observations and conditional samples.}}
+  \includegraphics[width=.8\linewidth]{toy_training.png}
+  \caption{}
+  \label{fig:toy_training}
 \end{figure}
+
+Figure~\ref{fig:toy_latent_sweep} compares the held-out metrics across latent sizes.
+$L = 2$ provides the lowest test loss (0.0434) and reconstruction error (0.0141).
+Moving from one to two latent dimensions reduces the reconstruction error by about a half, however, moving beyond two dimensions the model does not seem to use the extra capacity; test KL remains relatively flat after reaching 2 dimensions and only 2 dimensions remain active according to our criteria.
+We do see reconstruction error raising slightly in $L=4$ and $L=8$, we believe this could be due to the inclusion of the extra dimensions making optimization slightly more difficult.
+Two active dimensions are consistent with how the synthetic dataset was constructed: point vary along two components: the crescent location and across the crescent's thickness.
+
+
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=.46\linewidth]{toy_latent.png}
-  \includegraphics[width=.46\linewidth]{toy_latent_sweep.png}
-  \caption{\verify{Describe the toy latent representation and latent-size comparison.}}
+  \includegraphics[width=\linewidth]{toy_latent_sweep.png}
+  \caption{}
+  \label{fig:toy_latent_sweep}
 \end{figure}
+
+Figure~\ref{fig:toy_samples_by_latent} compares held-out observations with samples generated by drawing $z \sim \mathcal{N}(0, I)$ and decoding with each direction label.
+With $L = 1$, each direction's samples fall on a thin line representing the inner boundary of each crescent; the crescent's orientation and length are correct, however, it is missing the crescent's thickness.
+With $L \geq 2$ the samples fill the crescents well and seem to match the spread, orientation and overlap that we see in the held-out observations.
+$L \geq 2$ models are nearly indistinguishable which was expected after observing reconstruction error and test KL in Figure~\ref{fig:toy_latent_sweep} above.
+Overall it appears the cVAE learned the latent space quickly and with only 2 latent dimensions which is expected as this is a simple 2-D example.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\linewidth]{toy_samples_by_latent.png}
+  \caption{}
+  \label{fig:toy_samples_by_latent}
+\end{figure}
+
+
 
 \section{MC\_RTT population activity}
 \begin{itemize}
