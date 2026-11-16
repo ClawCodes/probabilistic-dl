@@ -1,15 +1,9 @@
-\begin{thebibliography}{4}
+\begin{thebibliography}{3}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
   \providecommand{\doi}[1]{doi: #1}\else
   \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
-
-\bibitem[Kingma and Welling(2014)]{kingma2014autoencoding}
-Diederik~P. Kingma and Max Welling.
-\newblock Auto-encoding variational bayes.
-\newblock \emph{International Conference on Learning Representations}, 2014.
-\newblock VERIFY: Conference/year formatting required by course style.
 
 \bibitem[Makin et~al.(2018)Makin, O'Doherty, Cardoso, and Sabes]{makin2018superior}
 Joseph~G. Makin, Joseph~E. O'Doherty, Mariana M.~B. Cardoso, and Philip~N. Sabes.
