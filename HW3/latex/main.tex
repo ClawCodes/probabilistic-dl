@@ -31,7 +31,7 @@ In this report we use a cVAE to first explore how a cVAE performs in its objecti
 \subsection{Synthetic 2D}
 
 We generate a synthetic 2-D dataset inspired by the popular two moons dataset; instead of two crescents we construct eight noisy crescents, one per direction label.
-Each crescent is the same shape, just rotated by its direction's angle (0°, 45°, …, 315°), the direction labels were chosen such that the crescents for a complete circle.
+Each crescent is the same shape, just rotated by its direction's angle (0°, 45°, …, 315°), the direction labels were chosen such that the crescents form a complete circle.
 Points vary along each crescent and across it by including jitter and Gaussian noise.
 The data is split randomly in an 80/20 split (3,840 train, 960 test).
 Each feature is standardized before training.
@@ -39,9 +39,8 @@ This data set will serve as our simple benchmark to observe how well our cVAE is
 
 \subsection{MC\_RTT}
 
-MC\_RTT is a recording a single recording from an adult male rhesus macaque monkey of the following task:
+MC\_RTT is a single recording from an adult male rhesus macaque monkey of the following task:
 
-Task:
 \begin{itemize}
   \item The monkey moves its fingertip in a horizontal plane to steer a cursor onto targets on a screen
   \item Targets appear randomly, one at a time on an $8 \times 8$ grid
@@ -121,7 +120,7 @@ The decoder maps $[z, c]$ to a reconstruction $\hat{x}$:
   \text{Linear}(H \times H) \to \text{SiLU} \to
   \text{Linear}(H \times D).
 \]
-For the toy data $D = 2$ and $H = 128$; for MC\_RTT $D = 480$ and $H = 256$.
+For the synthetic data $D = 2$ and $H = 128$; for MC\_RTT $D = 480$ and $H = 256$.
 
 \subsection{Training}
 
@@ -147,7 +146,7 @@ $\beta$ is held fixed within each latent-size sweep.
   \label{tab:training_settings}
   \begin{tabular}{@{}lll@{}}
     \toprule
-                                 & Toy                       & MC\_RTT                  \\
+                                 & Synthetic                       & MC\_RTT                  \\
     \midrule
     Input dimension $D$          & 2                         & 480                      \\
     Hidden width $H$             & 128                       & 256                      \\
@@ -165,13 +164,13 @@ MC\_RTT is trained for only 50 epochs because its validation reconstruction erro
 \section{Synthetic 2-D Dataset}
 
 Figure~\ref{fig:toy_training} shows the training and validation curves for each latent size.
-All four models converge within \~20 epochs and the training and validation curves lie ontop of eachother, so there is no sign of overfitting.
+All four models converge within $\sim\!20$ epochs and the training and validation curves lie ontop of eachother, so there is no sign of overfitting.
 The KL term rises sharply in the first few epochs as the encoder begins to learn the latent space then quickly settles.
 Overall the model seemed to have learned the latent space well and provided strong reconstruction.
 
-\begin{figure}[ht]
+\begin{figure}[!htbp]
   \centering
-  \includegraphics[width=.8\linewidth]{toy_training.png}
+  \includegraphics[width=.65\linewidth]{toy_training.png}
   \caption{Training (solid) and validation (dashed) curves for the synthetic dataset at each latent size $L$: total loss, reconstruction MSE and KL divergence.}
   \label{fig:toy_training}
 \end{figure}
@@ -180,10 +179,10 @@ Figure~\ref{fig:toy_latent_sweep} compares the held-out metrics across latent si
 $L = 2$ provides the lowest test loss (0.0434) and reconstruction error (0.0141).
 Moving from one to two latent dimensions reduces the reconstruction error by about a half, however, moving beyond two dimensions the model does not seem to use the extra capacity; test KL remains relatively flat after reaching 2 dimensions and only 2 dimensions remain active according to our criteria.
 We do see reconstruction error raising slightly in $L=4$ and $L=8$, we believe this could be due to the inclusion of the extra dimensions making optimization slightly more difficult.
-Two active dimensions are consistent with how the synthetic dataset was constructed: point vary along two components: the crescent location and across the crescent's thickness.
+Two active dimensions are consistent with how the synthetic dataset was constructed: points vary along two components: the crescent location and across the crescent's thickness.
 
 
-\begin{figure}[ht]
+\begin{figure}[!htbp]
   \centering
   \includegraphics[width=\linewidth]{toy_latent_sweep.png}
   \caption{Held-out loss, reconstruction MSE and KL divergence against latent size $L$ for the synthetic dataset. Labels give the number of active latent dimensions.}
@@ -196,7 +195,7 @@ With $L \geq 2$ the samples fill the crescents well and seem to match the spread
 $L \geq 2$ models are nearly indistinguishable which was expected after observing reconstruction error and test KL in Figure~\ref{fig:toy_latent_sweep} above.
 Overall it appears the cVAE learned the latent space quickly and with only 2 latent dimensions which is expected as this is a simple 2-D example.
 
-\begin{figure}[ht]
+\begin{figure}[!htbp]
   \centering
   \includegraphics[width=\linewidth]{toy_samples_by_latent.png}
   \caption{Held-out synthetic observations (left) and generated samples for each latent size $L$, colored by direction label.}
@@ -290,7 +289,6 @@ Overall, the 16-dimensional model had the best final held-out reconstruction met
 The main conclusion is quite limited: this cVAE learned coarse, direction-conditioned structure in smoothed M1 population-rate windows, but was not able to reproduce the full variability of the held-out data.
 Thus, we conclude that a low reconstruction error alone is not sufficient evidence that a neural generator is realistic.
 We also note the PCA and heatmap comparisons show that generated samples are underdispersed and smoother than held-out trials (Figures~\ref{fig:mc-rtt-pca} and \ref{fig:mc-rtt-samples-latent}).
-This is *write implications of this here*. 
 
 First, the analysis is not a full model of reaching: it uses one 200-ms window centered on peak speed from each source-provided chunk, so it discards the rest of the reach and does not model transitions across time. 
 Because the chunks are not aligned to reaches, a window can also contain only part of a movement.
