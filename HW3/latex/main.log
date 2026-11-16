@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.3.8)  15 NOV 2026 20:45
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.3.8)  15 NOV 2026 20:48
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -272,52 +272,50 @@ al/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc}]
 <figs/toy_training.png, id=20, 787.3415pt x 654.8465pt>
 File: figs/toy_training.png Graphic file (type png)
 <use figs/toy_training.png>
-Package pdftex.def Info: figs/toy_training.png  used on input line 176.
+Package pdftex.def Info: figs/toy_training.png  used on input line 173.
 (pdftex.def)             Requested size: 375.80544pt x 312.57411pt.
 <figs/toy_latent_sweep.png, id=22, 858.8085pt x 244.112pt>
 File: figs/toy_latent_sweep.png Graphic file (type png)
 <use figs/toy_latent_sweep.png>
-Package pdftex.def Info: figs/toy_latent_sweep.png  used on input line 190.
+Package pdftex.def Info: figs/toy_latent_sweep.png  used on input line 187.
 (pdftex.def)             Requested size: 469.75502pt x 133.52821pt.
+<figs/toy_samples_by_latent.png, id=23, 1230.999pt x 314.776pt>
+File: figs/toy_samples_by_latent.png Graphic file (type png)
+<use figs/toy_samples_by_latent.png>
+Package pdftex.def Info: figs/toy_samples_by_latent.png  used on input line 200
+.
+(pdftex.def)             Requested size: 469.75502pt x 120.12044pt.
 
 
 [3]
-<figs/toy_samples_by_latent.png, id=30, 1230.999pt x 314.776pt>
-File: figs/toy_samples_by_latent.png Graphic file (type png)
-<use figs/toy_samples_by_latent.png>
-Package pdftex.def Info: figs/toy_samples_by_latent.png  used on input line 203
-.
-(pdftex.def)             Requested size: 469.75502pt x 120.12044pt.
 <figs/mc_rtt_observed_and_reconstructions.png, id=31, 716.276pt x 354.123pt>
 File: figs/mc_rtt_observed_and_reconstructions.png Graphic file (type png)
 <use figs/mc_rtt_observed_and_reconstructions.png>
 Package pdftex.def Info: figs/mc_rtt_observed_and_reconstructions.png  used on 
-input line 217.
+input line 213.
 (pdftex.def)             Requested size: 422.77664pt x 209.0226pt.
 <figs/mc_rtt_samples.png, id=32, 851.18pt x 354.123pt>
 File: figs/mc_rtt_samples.png Graphic file (type png)
 <use figs/mc_rtt_samples.png>
-Package pdftex.def Info: figs/mc_rtt_samples.png  used on input line 222.
+Package pdftex.def Info: figs/mc_rtt_samples.png  used on input line 218.
 (pdftex.def)             Requested size: 422.77664pt x 175.8939pt.
 <figs/mc_rtt_direction_profiles.png, id=33, 787.3415pt x 354.123pt>
 File: figs/mc_rtt_direction_profiles.png Graphic file (type png)
 <use figs/mc_rtt_direction_profiles.png>
 Package pdftex.def Info: figs/mc_rtt_direction_profiles.png  used on input line
- 223.
+ 219.
 (pdftex.def)             Requested size: 422.77664pt x 190.15367pt.
 <figs/mc_rtt_latent.png, id=34, 317.5865pt x 281.853pt>
 File: figs/mc_rtt_latent.png Graphic file (type png)
 <use figs/mc_rtt_latent.png>
-Package pdftex.def Info: figs/mc_rtt_latent.png  used on input line 228.
+Package pdftex.def Info: figs/mc_rtt_latent.png  used on input line 224.
 (pdftex.def)             Requested size: 216.09045pt x 191.77792pt.
 <figs/mc_rtt_latent_sweep.png, id=35, 858.8085pt x 244.112pt>
 File: figs/mc_rtt_latent_sweep.png Graphic file (type png)
 <use figs/mc_rtt_latent_sweep.png>
-Package pdftex.def Info: figs/mc_rtt_latent_sweep.png  used on input line 229.
+Package pdftex.def Info: figs/mc_rtt_latent_sweep.png  used on input line 225.
 (pdftex.def)             Requested size: 216.09045pt x 61.42267pt.
  (./main.bbl
-
-[4 <./figs/toy_training.png>]
 Underfull \hbox (badness 1308) in paragraph at lines 22--26
 []\OT1/cmr/m/n/10 Joseph E. O'Doherty, Mar-i-ana M. B. Car-doso, Joseph G. Maki
 n, and Philip N. Sabes.  Non-
@@ -329,7 +327,9 @@ Underfull \hbox (badness 1867) in paragraph at lines 22--26
  cor-tex elec-tro-phys-i-ol-ogy, 2020.  URL
  []
 
-)
+
+
+[4 <./figs/toy_training.png>])
 
 [5 <./figs/toy_latent_sweep.png> <./figs/toy_samples_by_latent.png>]
 
@@ -345,7 +345,7 @@ L3 programming layer <2025-01-18>
 Here is how much of TeX's memory you used:
  3610 strings out of 473190
  54638 string characters out of 5715801
- 470296 words of memory out of 5000000
+ 471296 words of memory out of 5000000
  26843 multiletter control sequences out of 15000+600000
  565898 words of font info for 61 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
@@ -366,7 +366,7 @@ ive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/local/texlive
 25/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/local/texlive/202
 5/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/local/texlive/2025
 /texmf-dist/fonts/type1/public/cm-super/sfrm1000.pfb>
-Output written on main.pdf (7 pages, 1414032 bytes).
+Output written on main.pdf (7 pages, 1414318 bytes).
 PDF statistics:
  126 PDF objects out of 1000 (max. 8388607)
  68 compressed objects within 1 object stream
